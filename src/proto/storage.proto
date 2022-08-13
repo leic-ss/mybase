@@ -1,0 +1,150 @@
+syntax = "proto3";
+
+package mybase;
+
+message KvEntry
+{
+	bytes 	key 	= 1;
+	bytes 	val 	= 2;
+	uint32 	mtime 	= 3;
+	uint32  etime  	= 4;
+};
+
+message DumpHeader
+{
+	int32  	socket       	= 1;
+	uint32 	socketCreate	= 2;
+	uint32  request  		= 3;
+	uint32	srcIp			= 4;
+	uint32  srcPort 		= 5;
+};
+
+message DumpEntry
+{
+	DumpHeader	 	head 		= 1;
+
+	uint32			channelid   = 2;
+	uint32			mtype 		= 3;
+
+	uint32  		ns  		= 4;
+	bytes   		key 		= 5;
+	bytes   		val 		= 6;
+	uint32			expired  	= 7;
+	uint32 			version     = 8;
+};
+
+// get
+message KvRequestGet
+{
+	uint32              clientVersion   = 1;
+	int32				serverFlag 		= 2;
+	uint32 				ns  		  	= 3;
+	bytes 	    		key          	= 4;
+};
+
+message KvResponseGet
+{
+	uint32				metaVersion 	= 1;
+	KvEntry    			kv           	= 2;
+	int32 				code			= 3;
+};
+
+// heartbeat
+message KvRequestHeartbeat
+{
+	uint64 						serverId        	= 1;
+	uint32 						metaVersion   		= 2;
+
+	uint32	  					nsCapacityVersion	= 3;
+
+	repeated uint32 			buckets		 		= 4;
+};
+
+message KvResponseHeartbeat
+{
+	int32                       code                = 1;
+	uint32 						clientVersion		= 2;
+	uint32 						serverVersion		= 3;
+	uint32 						bucketCount			= 4;
+    uint32 						copyCount			= 5;
+
+    uint32 						nsCapacityVersion	= 6;
+    map<uint32, uint64> 		nsCapacity	 		= 7;
+    uint64 						serverId 			= 8;
+    repeated uint64 			metaServers 		= 9;
+
+    bytes 						tableBytes         	= 10;
+};
+
+// put
+message KvRequestPut
+{
+	uint32						clientVersion       = 1;
+	int32						serverFlag 			= 2;
+	uint32 						ns 					= 3;
+	uint32 						version       		= 4;
+	uint32						expired				= 5;
+	bytes 						key 				= 6;
+	bytes						val 				= 7;
+};
+
+message KvRequestDump
+{
+	uint64			peerid						= 1;
+	uint32   		bucket 						= 2;
+	uint64  		nextIdx 					= 3;
+	uint64 			commitIdx 					= 4;
+	repeated 		bytes  entries  			= 5;
+};
+
+// remove
+message KvRequestRemove
+{
+	uint32				clientVersion 				= 1;
+	uint32 				ns  		  				= 2;
+	repeated bytes      keys           				= 3;
+};
+
+// remove ns
+message KvRequestRemoveArea
+{
+	uint32 				ns 							= 1;
+};
+
+// ping
+message KvRequestPing
+{
+	uint32              metaVersion 				= 1;
+	uint32			  	value 						= 2;
+};
+
+message KvRequestFinishMigration
+{
+	uint32				bucketid					= 1;
+	uint64 				serverid 					= 2;
+	uint32				metaVersion					= 3;	
+};
+
+// response
+message KvResponseReturn
+{
+	int32 				code 						= 1;
+	uint32 				metaVersion					= 2;
+	string 				desc 						= 3;
+};
+
+// dump return
+message KvResponseDumpReturn
+{
+	uint64 				peerid 						= 1;
+	bool 				accept 						= 2;
+	uint64				nextIdx 					= 3;
+	uint64				commitIdx 					= 4;
+	int32 				code 						= 5;
+};
+
+message BucketHeartbeat
+{
+	uint32 bucketid					= 1;
+	uint64 commitidx				= 2;
+};

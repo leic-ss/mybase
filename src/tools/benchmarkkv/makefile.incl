@@ -1,0 +1,80 @@
+#get version
+COMMIT_DATE := $(shell echo `git show -s --pretty=format:%ci HEAD | sed 's/-//g'|cut -c 1-8`)
+COMMIT_HASH := $(shell git show -s --pretty=format:%h --abbrev=7 HEAD)
+ifeq "$(strip $(BRANCH))" ""
+BRANCH      := $(shell BRANCH=`git branch 2>/dev/null | grep '*' | head -n1`; echo $${BRANCH:2})
+endif
+GIT_VERSION     := "$(BRANCH) $(COMMIT_DATE) $(COMMIT_HASH)"
+
+CPPFLAGS    = -g --std=c++11 -fPIC -Wall -O2
+EXTRAFLAGS  = -D_LARGEFILE_SOURCE -D_FILE_OFFSET_BITS=64 -DGIT_VERSION=\"$(GIT_VERSION)\"
+INCLUDES    = $(DEF_INCLUDES)
+CFLAGS      = $(CPPFLAGS) $(INCLUDES) 
+CXXFLAGS    = $(CFLAGS)
+LDLIBS      = -lpthread -lrt -lz $(DEF_LIBS)
+LDFLAGS     = $(LDLIBS)
+
+MAKE        = make
+CC          = gcc
+CXX         = g++
+LEX         = flex
+YACC        = bison
+MV          = /bin/mv -f
+RM          = rm -f
+CP          = /bin/cp -f
+AR          = ar cru
+
+#rule definations
+COMPILE.c   = $(CC)  -o $@ -c $< $(CFLAGS)
+COMPILE.cxx = $(CXX) -o $@ -c $< $(CXXFLAGS)
+LINK.c      = $(CC)  -o $@ $^ $(CFLAGS)   $(LDFLAGS)
+LINK.cxx    = $(CXX) -o $@ $^ $(CXXFLAGS) $(LDFLAGS)
+
+.SUFFIXES: .d
+%:%.c
+	$(LINK.c)
+
+%:%.C
+	$(LINK.cxx)
+
+%:%.cc
+	$(LINK.cxx)
+
+%:%.cpp
+	$(LINK.cxx)
+
+%:%.CPP
+	$(LINK.cxx)
+
+%:%.c++
+	$(LINK.cxx)
+
+%:%.cp
+	$(LINK.cxx)
+
+%:%.cxx
+	$(LINK.cxx)
+
+%.o:%.c
+	$(COMPILE.c)
+
+%.o:%.C
+	$(COMPILE.cxx)
+
+%.o:%.cc
+	$(COMPILE.cxx)
+
+%.o:%.cpp
+	$(COMPILE.cxx)
+
+%.o:%.CPP
+	$(COMPILE.cxx)
+
+%.o:%.c++
+	$(COMPILE.cxx)
+
+%.o:%.cp
+	$(COMPILE.cxx)
+
+%.o:%.cxx
+	$(COMPILE.cxx)

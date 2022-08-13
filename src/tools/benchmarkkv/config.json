@@ -1,0 +1,31 @@
+{
+    "cluster" : {
+        "configserver": "192.168.56.101:5198",
+        "group": "group_1"
+    },
+
+    "logfile": "benchmark.log",
+    "loglevel": "info",
+
+    "timeout_msec": 10,
+    "work_thread_count": 3,
+    "ans_thread_count": 2,
+
+    "workload": {
+        "type": "put",
+        "key_generator": "sequential",
+
+        "key_size": 10,
+        "val_size": 1024,
+
+        "max_key_range": 2000000,
+        "max_ops_per_sec": 5000,
+
+        "ns": 1,
+        "ttl": 1000
+    },
+
+    "sample_interval": {
+        "by_sec": 60
+    }
+}

@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+package mybase;
+
+message ServerInfo
+{
+	enum Status {
+        Alive       	= 0;
+        Down        	= 1;
+        ForceDown  	    = 2;
+
+        Initial         = 3;
+    }
+
+    uint64 serverId 	= 1;
+    uint32 lastTime 	= 2;
+    Status status   	= 3;
+};
+
+message SysData
+{
+	map<uint32, uint64> namespaces = 1;
+    map<uint64, ServerInfo> nodeList = 2;
+};
+
+message KvRequestGetMeta
+{
+    enum Type {
+        Client           = 0;
+        Storage          = 1;
+    }
+
+	uint32 metaVersion   = 1;
+    Type type            = 2;
+};
+
+message KvResponseGetMeta
+{
+	uint32 bucketCount				= 1;
+    uint32 copyCount				= 2;
+	uint32 metaVersion 				= 3;
+
+    bytes tableBytes                = 4;
+};
