@@ -15,12 +15,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 **************************************************************************/
 
-#include "rdb_define.h"
+#include "rocksdb_defs.h"
 
 namespace mybase
 {
 
-void RdbKey::set(const char* key_data, int32_t key_size, int32_t bucket_number, int32_t area)
+void RocksdbKey::set(const char* key_data, int32_t key_size, int32_t bucket_number, int32_t area)
 {
     if (!key_data || key_size <= 0) return ;
 
@@ -33,7 +33,7 @@ void RdbKey::set(const char* key_data, int32_t key_size, int32_t bucket_number, 
     alloc_ = true;
 }
 
-void RdbKey::assign(char* data, const int32_t data_size)
+void RocksdbKey::assign(char* data, const int32_t data_size)
 {
     destroy();
     data_ = data;
@@ -41,7 +41,7 @@ void RdbKey::assign(char* data, const int32_t data_size)
     alloc_ = false;
 }
 
-void RdbKey::destroy()
+void RocksdbKey::destroy()
 {
     if (!alloc_ || !data_) return ;
 
@@ -51,31 +51,31 @@ void RdbKey::destroy()
     alloc_ = false;
 }
 
-char* RdbKey::key()
+char* RocksdbKey::key()
 {
     int32_t meta_size = sRdbKeyBucketSize + sRdbKeyAreaSize;
     return (data_ != nullptr) ? (data_ + meta_size) : nullptr;
 }
 
-int32_t RdbKey::keySize()
+int32_t RocksdbKey::keySize()
 {
     int32_t meta_size = sRdbKeyBucketSize + sRdbKeyAreaSize;
     return (data_size_ > meta_size) ? (data_size_ - meta_size) : 0;
 }
 
-char* RdbKey::mergedKey()
+char* RocksdbKey::mergedKey()
 {
     int32_t meta_size = sRdbKeyBucketSize;
     return (data_ != nullptr) ? (data_ + meta_size) : nullptr;
 }
 
-int32_t RdbKey::mergedKeySize()
+int32_t RocksdbKey::mergedKeySize()
 {
     int32_t meta_size = sRdbKeyBucketSize;
     return (data_size_ > meta_size) ? (data_size_ - meta_size) : 0;
 }
 
-int32_t RdbKey::area()
+int32_t RocksdbKey::area()
 {
     int32_t bucket_size = sRdbKeyBucketSize;
     char* buf = (data_ != nullptr ? data_ + bucket_size : nullptr);
@@ -85,14 +85,14 @@ int32_t RdbKey::area()
     return -1;
 }
 
-void RdbKey::encodeBucketNumber(char* buf, int32_t bucket_number)
+void RocksdbKey::encodeBucketNumber(char* buf, int32_t bucket_number)
 {
     for (int32_t i = 0; i < sRdbKeyBucketSize; ++i) {
         buf[sRdbKeyBucketSize - i - 1] = (bucket_number >> (i*8)) & 0xFF;
     }
 }
 
-int32_t RdbKey::decodeBucketNumber(const char* buf)
+int32_t RocksdbKey::decodeBucketNumber(const char* buf)
 {
     int32_t bucket_number = 0;
     for (int32_t i = 0; i < sRdbKeyBucketSize; ++i) {
@@ -101,13 +101,13 @@ int32_t RdbKey::decodeBucketNumber(const char* buf)
     return bucket_number;
 }
 
-void RdbKey::encodeArea(char* buf, int32_t area)
+void RocksdbKey::encodeArea(char* buf, int32_t area)
 {
     buf[0] = area & 0xff;
     buf[1] = (area >> 8) & 0xff;
 }
 
-void RdbKey::buildScanKey(int32_t bucket_number, std::string& start_key, std::string& end_key)
+void RocksdbKey::buildScanKey(int32_t bucket_number, std::string& start_key, std::string& end_key)
 {
     char buf[sRdbKeyBucketSize] = {0};
     encodeBucketNumber(buf, bucket_number);
@@ -116,7 +116,7 @@ void RdbKey::buildScanKey(int32_t bucket_number, std::string& start_key, std::st
     end_key.assign(buf, sRdbKeyBucketSize);
 }
 
-void RdbKey::buildScanKeyWithArea(int32_t area, std::string& start_key, std::string& end_key)
+void RocksdbKey::buildScanKeyWithArea(int32_t area, std::string& start_key, std::string& end_key)
 {
     char buf[sRdbKeyBucketSize + sRdbKeyAreaSize] = {0};
 
@@ -176,7 +176,7 @@ void ValueMeta::decodeFromBuf(uint8_t* buf)
 }
 
 
-void RdbItem::set(const char* value_data, const int32_t value_size)
+void RocksdbItem::set(const char* value_data, const int32_t value_size)
 {
     if (!value_data || value_size <= 0) return ;
 
@@ -191,7 +191,7 @@ void RdbItem::set(const char* value_data, const int32_t value_size)
     alloc_ = true;
 }
 
-void RdbItem::assign(char* data, const int32_t data_size)
+void RocksdbItem::assign(char* data, const int32_t data_size)
 {
     destroy();
 
@@ -204,7 +204,7 @@ void RdbItem::assign(char* data, const int32_t data_size)
     }
 }
 
-void RdbItem::destroy()
+void RocksdbItem::destroy()
 {
     if (!alloc_ || !data_) return ;
 
@@ -214,13 +214,13 @@ void RdbItem::destroy()
     alloc_ = false;
 }
 
-char* RdbItem::value()
+char* RocksdbItem::value()
 {
     if (!data_) return nullptr;
     return data_ + ValueMeta::size();
 }
 
-int32_t RdbItem::valueSize()
+int32_t RocksdbItem::valueSize()
 {
     if ( data_size_ <= (int32_t)ValueMeta::size() ) return 0;
     return ( data_size_ - (int32_t)ValueMeta::size() );

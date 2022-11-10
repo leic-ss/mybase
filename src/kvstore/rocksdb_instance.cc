@@ -20,7 +20,7 @@ limitations under the License.
 #include "public/cast_helper.h"
 #include "rocksdb/utilities/options_util.h"
 #include "rocksdb/filter_policy.h"
-#include "rdb_instance.h"
+#include "rocksdb_instance.h"
 
 #include <stdint.h>
 #include <sys/time.h>
@@ -46,8 +46,8 @@ bool ExpiredFilter::Filter(int32_t level,
                            std::string* new_value,
                            bool* value_changed) const
 {
-    RdbKey rdb_key;
-    RdbItem rdb_item;
+    RocksdbKey rdb_key;
+    RocksdbItem rdb_item;
 
     rdb_key.assign(_CCC(key.data()), key.size());
     rdb_item.assign(_CCC(value.data()), value.size());
@@ -102,7 +102,7 @@ void ExpiredFilterFactory::setValidBucketMgn(const CValidBucketMgn& valid_bucket
 
 const char* ExpiredFilterFactory::Name() const { return "ExpiredFilterFactory"; }
 
-RdbInstance::RdbInstance(mybase::BaseLogger* logger) : dataDb(nullptr)
+RocksdbInstance::RocksdbInstance(mybase::BaseLogger* logger) : dataDb(nullptr)
                                                   , sysDb(nullptr)
                                                   , scan_it_(nullptr)
                                                   , scan_bucket_(-1)
@@ -113,7 +113,7 @@ RdbInstance::RdbInstance(mybase::BaseLogger* logger) : dataDb(nullptr)
                                                   , myLog(logger)
 {}
 
-RdbInstance::RdbInstance(int32_t index, bool db_version_care)
+RocksdbInstance::RocksdbInstance(int32_t index, bool db_version_care)
                             : dataDb(nullptr)
                             , sysDb(nullptr)
                             , scan_it_(nullptr)
@@ -125,7 +125,7 @@ RdbInstance::RdbInstance(int32_t index, bool db_version_care)
 {}
 
 // TODO: optimize
-bool RdbInstance::initialize(const std::string& db_path, const std::string& sys_db_path)
+bool RocksdbInstance::initialize(const std::string& db_path, const std::string& sys_db_path)
 {
     if ( !openSysDB() ) {
         return false;
@@ -146,7 +146,7 @@ bool RdbInstance::initialize(const std::string& db_path, const std::string& sys_
     return true;
 }
 
-bool RdbInstance::openSysDB()
+bool RocksdbInstance::openSysDB()
 {
     rocksdb::DBOptions sys_db_opts;
     const char* sys_db_path = sDefaultConfig.getString(sStorageSection, sSysDbPath, "data/sysdb");
@@ -183,7 +183,7 @@ bool RdbInstance::openSysDB()
     return true;
 }
 
-bool RdbInstance::openDataDB()
+bool RocksdbInstance::openDataDB()
 {
     const char* data_db_path = sDefaultConfig.getString(sStorageSection, sDataDbPath, "data/datadb");
     rocksdb::Status s = rocksdb::LoadLatestOptions(data_db_path, rocksdb::Env::Default(), &dataDbOpts, &dataCfDescs, false);
@@ -245,7 +245,7 @@ bool RdbInstance::openDataDB()
     return true;
 }
 
-RdbInstance::~RdbInstance()
+RocksdbInstance::~RocksdbInstance()
 {
     for (auto& handle : dataCfHandles) {
         delete handle;
@@ -271,9 +271,9 @@ RdbInstance::~RdbInstance()
     }
 }
 
-void RdbInstance::destroy() { }
+void RocksdbInstance::destroy() { }
 
-int32_t RdbInstance::put(int32_t ns, int32_t bucket_no, const std::string& key, const std::string& value, uint32_t expire_time)
+int32_t RocksdbInstance::put(int32_t ns, int32_t bucket_no, const std::string& key, const std::string& value, uint32_t expire_time)
 {
     uint32_t mdate = TimeHelper::currentSec();
     uint32_t edate = (expire_time != 0) ? (mdate + expire_time) : 0;
@@ -281,9 +281,9 @@ int32_t RdbInstance::put(int32_t ns, int32_t bucket_no, const std::string& key, 
     _log_info(myLog, "bucket_no[%d] mdate = %u expire_time = %u edate = %u",
                bucket_no, mdate, expire_time, edate);
 
-    RdbKey rdb_key(key.data(), key.size(), bucket_no, ns);
+    RocksdbKey rdb_key(key.data(), key.size(), bucket_no, ns);
 
-    RdbItem rdb_item;
+    RocksdbItem rdb_item;
     // rdb_item.meta().flag = value.data_meta.flag;
     rdb_item.meta().mdate = mdate;
     rdb_item.meta().edate = edate;
@@ -293,10 +293,10 @@ int32_t RdbInstance::put(int32_t ns, int32_t bucket_no, const std::string& key, 
     return do_put(rdb_key, rdb_item);
 }
 
-int32_t RdbInstance::get(int32_t ns, int32_t bucket_no, const std::string& key, KvEntry& entry)
+int32_t RocksdbInstance::get(int32_t ns, int32_t bucket_no, const std::string& key, KvEntry& entry)
 {
-    RdbKey rdb_key(key.data(), key.size(), bucket_no, ns);
-    RdbItem rdb_item;
+    RocksdbKey rdb_key(key.data(), key.size(), bucket_no, ns);
+    RocksdbItem rdb_item;
 
     std::string rdb_value;
     int32_t rc = do_get(rdb_key, rdb_value);
@@ -315,28 +315,17 @@ int32_t RdbInstance::get(int32_t ns, int32_t bucket_no, const std::string& key, 
         return KV_RETURN_DATA_EXPIRED;
     }
 
-    // key.setVersion(rdb_item.meta().version);
-    // key.data_meta.mdate = rdb_item.meta().mdate;
-    // key.data_meta.edate = rdb_item.meta().edate;
-    // key.data_meta.flag = rdb_item.meta().flag;
-    // key.data_meta.keysize = key.getSize();
-
     entry.set_key(key);
     entry.set_val(rdb_item.value(), rdb_item.valueSize());
     entry.set_mtime(rdb_item.meta().mdate);
     entry.set_etime(rdb_item.meta().edate);
-    // value.setVersion(rdb_item.meta().version);
-    // value.data_meta.mdate = rdb_item.meta().mdate;
-    // value.data_meta.edate = rdb_item.meta().edate;
-    // value.data_meta.valsize = rdb_item.valueSize();
-    // value.data_meta.flag = rdb_item.meta().flag;
 
     return OP_RETURN_SUCCESS;
 }
 
-int32_t RdbInstance::remove(int32_t ns, int32_t bucket_no, const std::string& key)
+int32_t RocksdbInstance::remove(int32_t ns, int32_t bucket_no, const std::string& key)
 {
-    RdbKey rdb_key(key.data(), key.size(), bucket_no, ns);
+    RocksdbKey rdb_key(key.data(), key.size(), bucket_no, ns);
 
     int32_t rc = do_remove(rdb_key);
     if (rc != OP_RETURN_SUCCESS) return rc;
@@ -344,11 +333,11 @@ int32_t RdbInstance::remove(int32_t ns, int32_t bucket_no, const std::string& ke
     return OP_RETURN_SUCCESS;
 }
 
-// int32_t RdbInstance::qpush(int32_t bucket_number, rocksdb::Slice& seq_key, rocksdb::Slice& value,
+// int32_t RocksdbInstance::qpush(int32_t bucket_number, rocksdb::Slice& seq_key, rocksdb::Slice& value,
 //                            rocksdb::Slice& item_key, rocksdb::Slice& item, uint32_t expire_time)
 // {
-//     RdbKey rdb_seq_key;
-//     RdbItem rdb_seq_item;
+//     RocksdbKey rdb_seq_key;
+//     RocksdbItem rdb_seq_item;
 //     {
 //         uint32_t mdate = 0, edate = 0;
 //         if (seq_key.data_meta.mdate == 0) {
@@ -379,8 +368,8 @@ int32_t RdbInstance::remove(int32_t ns, int32_t bucket_no, const std::string& ke
 //         rdb_seq_item.set(value.getData(), value.getSize());
 //     }
     
-//     RdbKey rdb_item_key;
-//     RdbItem rdb_item_item;
+//     RocksdbKey rdb_item_key;
+//     RocksdbItem rdb_item_item;
 //     {
 //         uint32_t mdate = 0, edate = 0;
 //         if (item_key.data_meta.mdate == 0) {
@@ -425,11 +414,11 @@ int32_t RdbInstance::remove(int32_t ns, int32_t bucket_no, const std::string& ke
 //     return OP_RETURN_SUCCESS;
 // }
 
-// int32_t RdbInstance::qpop(int32_t bucket_number, rocksdb::Slice& seq_key, rocksdb::Slice& value,
+// int32_t RocksdbInstance::qpop(int32_t bucket_number, rocksdb::Slice& seq_key, rocksdb::Slice& value,
 //                           rocksdb::Slice& item_key, rocksdb::Slice& item)
 // {
 //     int32_t area = item_key.decodeArea();
-//     RdbKey rdb_key(item_key.getData(), item_key.getSize(), bucket_number, area);
+//     RocksdbKey rdb_key(item_key.getData(), item_key.getSize(), bucket_number, area);
 
 //     std::string data;
 //     rocksdb::Status status = dataDb->Get(rocksdb::ReadOptions(), dataCfHandles[0], rocksdb::Slice(rdb_key.data(), rdb_key.size()), &data);
@@ -440,13 +429,13 @@ int32_t RdbInstance::remove(int32_t ns, int32_t bucket_no, const std::string& ke
 //     }
 
 //     {
-//         RdbItem rdb_item;
+//         RocksdbItem rdb_item;
 //         rdb_item.assign((char*)data.data(), data.size());
 //         item.setData(rdb_item.value(), rdb_item.valueSize(), true);
 //     }
 
-//     RdbKey rdb_seq_key;
-//     RdbItem rdb_seq_item;
+//     RocksdbKey rdb_seq_key;
+//     RocksdbItem rdb_seq_item;
 //     {
 //         int32_t area = seq_key.decodeArea();
 //         rdb_seq_key.set(seq_key.getData(), seq_key.getSize(), bucket_number, area);
@@ -473,7 +462,7 @@ int32_t RdbInstance::remove(int32_t ns, int32_t bucket_no, const std::string& ke
 //     return OP_RETURN_SUCCESS;
 // }
 
-// bool RdbInstance::beginScan(kv::MigrateInfo& info)
+// bool RocksdbInstance::beginScan(kv::MigrateInfo& info)
 // {
 //     if (scan_it_) {
 //         _log_warn(myLog, "scan_it_ already exist, delete it first. bucket[%d]", info.dbId);
@@ -491,7 +480,7 @@ int32_t RdbInstance::remove(int32_t ns, int32_t bucket_no, const std::string& ke
 //         ret = false;
 //     } else if (bucket_number != -1){
 //         char scan_key[sRdbKeyBucketSize] = {0};
-//         RdbKey::encodeBucketNumber(scan_key, bucket_number);
+//         RocksdbKey::encodeBucketNumber(scan_key, bucket_number);
 //         scan_it_->Seek(rocksdb::Slice(scan_key, sizeof(scan_key)));
 //     } else {
 //         scan_it_->Seek(rocksdb::Slice());
@@ -507,7 +496,7 @@ int32_t RdbInstance::remove(int32_t ns, int32_t bucket_no, const std::string& ke
 // }
 
 // // TODO: filter expired data
-// bool RdbInstance::getNextItems(std::vector<kv::ItemDataInfo*>& list)
+// bool RocksdbInstance::getNextItems(std::vector<kv::ItemDataInfo*>& list)
 // {
 //     list.clear();
 
@@ -520,15 +509,15 @@ int32_t RdbInstance::remove(int32_t ns, int32_t bucket_no, const std::string& ke
 //         return false;
 //     }
 
-//     RdbKey rdb_key;       // reuse is ok.
-//     RdbItem rdb_item;
+//     RocksdbKey rdb_key;       // reuse is ok.
+//     RocksdbItem rdb_item;
 
 //     int32_t batch_size = 0, batch_count = 0;
 
 //     uint64_t current_sec = TimeHelper::currentSec();
 //     while ( (batch_size < maxMigrateBatchSize) && (batch_count < maxMigrateBatchCount) && scan_it_->Valid()) {
 //         // match bucket
-//         int32_t actual_bucket = RdbKey::decodeBucketNumber(scan_it_->key().data());
+//         int32_t actual_bucket = RocksdbKey::decodeBucketNumber(scan_it_->key().data());
 //         if ( (scan_bucket_ != -1) && (scan_bucket_ != actual_bucket) ) {
 //             break;
 //         }
@@ -587,7 +576,7 @@ int32_t RdbInstance::remove(int32_t ns, int32_t bucket_no, const std::string& ke
 //     return still_have_;
 // }
 
-// bool RdbInstance::endScan(kv::MigrateInfo& info)
+// bool RocksdbInstance::endScan(kv::MigrateInfo& info)
 // {
 //     if (scan_it_) {
 //         _log_info(myLog, "delete iterator for end scan success! bucket[%d]", info.dbId);
@@ -603,7 +592,7 @@ int32_t RdbInstance::remove(int32_t ns, int32_t bucket_no, const std::string& ke
 //     return true;
 // }
 
-int32_t RdbInstance::do_put(RdbKey& rdb_key, RdbItem& rdb_item)
+int32_t RocksdbInstance::do_put(RocksdbKey& rdb_key, RocksdbItem& rdb_item)
 {
     if (!dataDb) return KV_ROCKSDB_kNotSupported;
 
@@ -627,7 +616,7 @@ int32_t RdbInstance::do_put(RdbKey& rdb_key, RdbItem& rdb_item)
     return OP_RETURN_SUCCESS;
 }
 
-int32_t RdbInstance::do_get(RdbKey& rdb_key, std::string& value)
+int32_t RocksdbInstance::do_get(RocksdbKey& rdb_key, std::string& value)
 {
     if (!dataDb) return KV_ROCKSDB_kNotSupported;
 
@@ -667,7 +656,7 @@ int32_t RdbInstance::do_get(RdbKey& rdb_key, std::string& value)
     return OP_RETURN_SUCCESS;
 }
 
-int32_t RdbInstance::do_remove(RdbKey& rdb_key)
+int32_t RocksdbInstance::do_remove(RocksdbKey& rdb_key)
 {
     if (!dataDb) return KV_ROCKSDB_kNotSupported;
 
@@ -699,7 +688,7 @@ int32_t RdbInstance::do_remove(RdbKey& rdb_key)
     return OP_RETURN_SUCCESS;
 }
 
-bool RdbInstance::loadAreaExpiredSec()
+bool RocksdbInstance::loadAreaExpiredSec()
 {
     std::string start_key = areaExpiredPrefix + std::string(":");
     std::string end_key = areaExpiredPrefix + std::string(";");
@@ -741,7 +730,7 @@ bool RdbInstance::loadAreaExpiredSec()
     return true;
 }
 
-void RdbInstance::setValidBucketMgn(const CValidBucketMgn& valid_bucket_mgn)
+void RocksdbInstance::setValidBucketMgn(const CValidBucketMgn& valid_bucket_mgn)
 {
     locker.writeLock();
     validBucketMgn = valid_bucket_mgn;
@@ -749,7 +738,7 @@ void RdbInstance::setValidBucketMgn(const CValidBucketMgn& valid_bucket_mgn)
     locker.writeUnlock();
 }
 
-int32_t RdbInstance::clearArea(int32_t area)
+int32_t RocksdbInstance::clearArea(int32_t area)
 {
     std::string key = areaExpiredPrefix + std::string(":") + std::to_string(area);
     uint64_t expired_ts = TimeHelper::currentSec();
@@ -762,7 +751,7 @@ int32_t RdbInstance::clearArea(int32_t area)
     if (!status.ok()) {
         _log_err(myLog, "clear area failed! key[%.*s] val[%.*s] err[%s]",
                   key.size(), key.data(), val.size(), val.data(), status.ToString().c_str());
-        return RdbInstance::to_kvstore_code(status);
+        return RocksdbInstance::to_kvstore_code(status);
     }
 
     locker.writeLock();
@@ -774,7 +763,7 @@ int32_t RdbInstance::clearArea(int32_t area)
     return OP_RETURN_SUCCESS;
 }
 
-uint64_t RdbInstance::getAreaExpiredTime(int32_t area)
+uint64_t RocksdbInstance::getAreaExpiredTime(int32_t area)
 {
     uint64_t expired_ts = 0;
 
@@ -788,7 +777,7 @@ uint64_t RdbInstance::getAreaExpiredTime(int32_t area)
     return expired_ts;
 }
 
-int32_t RdbInstance::to_kvstore_code(rocksdb::Status& status)
+int32_t RocksdbInstance::to_kvstore_code(rocksdb::Status& status)
 {
     int32_t rc = OP_RETURN_SUCCESS;
     switch (status.code()) {
@@ -868,12 +857,12 @@ int32_t RdbInstance::to_kvstore_code(rocksdb::Status& status)
     return rc;
 }
 
-std::string RdbInstance::getDbStatisticsInfo()
+std::string RocksdbInstance::getDbStatisticsInfo()
 {
     return dataDbOpts.statistics->ToString();
 }
 
-std::string RdbInstance::dbstat(const std::string& type)
+std::string RocksdbInstance::dbstat(const std::string& type)
 {
     std::string stats;
     if ( dataDb && !dataDb->GetProperty(dataCfHandles[0], type, &stats) ) {
@@ -882,12 +871,12 @@ std::string RdbInstance::dbstat(const std::string& type)
     return std::move(stats);
 }
 
-void RdbInstance::compactMannually()
+void RocksdbInstance::compactMannually()
 {
     dataDb->CompactRange(rocksdb::CompactRangeOptions(), dataCfHandles[0], nullptr, nullptr);
 }
 
-void RdbInstance::compact(const std::string& type, std::string& info)
+void RocksdbInstance::compact(const std::string& type, std::string& info)
 {
     rocksdb::Status s = rocksdb::Status::NotSupported("not supprted op type: " + type);
 

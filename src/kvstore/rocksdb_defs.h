@@ -33,17 +33,17 @@ static const int32_t sRdbKeyBucketSize = 3;
 static const int32_t sRdbKeyAreaSize = 2;
 static const int32_t sMaxBucketNumber = (1 << 24) - 2;
 
-class RdbKey
+class RocksdbKey
 {
 public:
-    RdbKey() : data_(nullptr), data_size_(0), alloc_(false) {}
-    RdbKey(const char* key_data, int32_t key_size, int32_t bucket_number, int32_t area)
+    RocksdbKey() : data_(nullptr), data_size_(0), alloc_(false) {}
+    RocksdbKey(const char* key_data, int32_t key_size, int32_t bucket_number, int32_t area)
             : data_(nullptr), data_size_(0), alloc_(false)
     {
         set(key_data, key_size, bucket_number, area);
     }
 
-    ~RdbKey() { destroy(); }
+    ~RocksdbKey() { destroy(); }
 
     void set(const char* key_data, int32_t key_size, int32_t bucket_number, int32_t area);
     void assign(char* data, const int32_t data_size);
@@ -78,7 +78,6 @@ private:
     bool alloc_;
 };
 
-
 struct ValueMeta {
   uint8_t  flag{0};
   uint16_t version{0};
@@ -91,11 +90,11 @@ struct ValueMeta {
 };
 
 
-class RdbItem
+class RocksdbItem
 {
 public:
-    RdbItem() : meta_(), data_(nullptr), data_size_(0), alloc_(false) {}
-    ~RdbItem() { destroy(); }
+    RocksdbItem() : meta_(), data_(nullptr), data_size_(0), alloc_(false) {}
+    ~RocksdbItem() { destroy(); }
 
     void set(const char* value_data, const int32_t value_size);
     void assign(char* data, const int32_t data_size);

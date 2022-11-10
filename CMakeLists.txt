@@ -80,6 +80,7 @@ set(FULL_BUILD_DEPS
     ${LIBZ}
     ${DEPS_PREFIX_PATH}/lib/libevent.a
     ${DEPS_PREFIX_PATH}/lib/libevent_pthreads.a
+    ${DEPS_PREFIX_PATH}/lib/libraftcc.a
     ${DEPS_PREFIX_PATH}/lib64/librocksdb.a
 )
 

@@ -18,7 +18,7 @@ limitations under the License.
 #include "storage.h"
 #include "storage.pb.h"
 
-#include "kvstore/rdb/rdb_manager.h"
+#include "kvstore/rocksdb_manager.h"
 #include "public/common.h"
 
 namespace mybase
@@ -236,7 +236,7 @@ bool StorageServer::initServer()
 
     commiter = new rpc::CThread("commiter", (rpc::CThread::callback)nullptr, myLog);
 
-    kvengine.reset( new RdbManager() );
+    kvengine.reset( new RocksdbManager() );
     kvengine->setLogger(myLog);
 
     if (!kvengine->initialize()) {

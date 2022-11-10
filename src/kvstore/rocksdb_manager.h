@@ -22,9 +22,8 @@ limitations under the License.
 #include <google/malloc_extension.h>
 #endif
 
-#include "kvstore/kv_engine.h"
-
-#include "rdb_instance.h"
+#include "kv_engine.h"
+#include "rocksdb_instance.h"
 // #include "public/nlohmann/json.hpp"
 
 #include <mutex>
@@ -33,31 +32,13 @@ limitations under the License.
 namespace mybase
 {
 
-class RdbInstance;
+class RocksdbInstance;
 
-class StatusBase {
-public:
-    enum Value : int { OK = 0 };
-    StatusBase() : val(OK) {}
-    StatusBase(Value _val) : val(_val) {}
-    StatusBase(int _val) : val((Value)_val) {}
-    inline explicit operator bool() { return ok(); }
-    inline bool operator==(const StatusBase::Value _val) const { return (val == _val) ? true : false; }
-    inline int toInt() const { return (int)val; }
-    inline operator int() const { return toInt(); }
-    inline bool ok() const { return val == OK; }
-    inline Value getValue() const { return val; }
-    inline Value value() const { return getValue(); }
-
-protected:
-    Value val;
-};
-
-class RdbManager : public kvstore::KvEngine
+class RocksdbManager : public kvstore::KvEngine
 {
 public:
-    RdbManager(mybase::BaseLogger* logger=nullptr);
-    virtual ~RdbManager();
+    RocksdbManager(mybase::BaseLogger* logger=nullptr);
+    virtual ~RocksdbManager();
 
     bool initialize();
 
@@ -78,10 +59,6 @@ public:
 
     bool initBuckets(const CValidBucketMgn& valid_bucket_mgn);
 
-    // bool beginScan(kv::MigrateInfo& info);
-    // bool endScan(kv::MigrateInfo& info);
-    // bool getNextItems(kv::MigrateInfo& info, std::vector<kv::ItemDataInfo*>& list);
-
     void statistics(std::string& info);
     void dbstats(const std::string& type, std::string& info);
     void setMaxFullScanSpeed(uint64_t speed, std::string& info);
@@ -94,8 +71,8 @@ private:
     static int hash(int bucket_number);
 
 private:
-    RdbInstance* rdb_instance_;
-    RdbInstance* scan_rdb_instance;
+    RocksdbInstance* rdb_instance_;
+    RocksdbInstance* scan_rdb_instance;
     std::mutex mutex;
 };
 

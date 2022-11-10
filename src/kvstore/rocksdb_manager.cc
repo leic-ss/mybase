@@ -15,8 +15,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 **************************************************************************/
 
-#include "rdb_manager.h"
-#include "rdb_instance.h"
+#include "rocksdb_manager.h"
+#include "rocksdb_instance.h"
 
 #include "public/config.h"
 #include "public/common.h"
@@ -24,10 +24,10 @@ limitations under the License.
 namespace mybase
 {
 
-RdbManager::RdbManager(mybase::BaseLogger* logger) : kvstore::KvEngine(logger), rdb_instance_(nullptr), scan_rdb_instance(nullptr)
+RocksdbManager::RocksdbManager(mybase::BaseLogger* logger) : kvstore::KvEngine(logger), rdb_instance_(nullptr), scan_rdb_instance(nullptr)
 { }
 
-RdbManager::~RdbManager()
+RocksdbManager::~RocksdbManager()
 {
     {
         std::unique_lock<std::mutex> l(mutex);
@@ -35,12 +35,12 @@ RdbManager::~RdbManager()
     }
 }
 
-bool RdbManager::initialize()
+bool RocksdbManager::initialize()
 {
     const char* data_db_path = sDefaultConfig.getString(sStorageSection, sDataDbPath, "data/datadb");
     const char* sys_db_path = sDefaultConfig.getString(sStorageSection, sSysDbPath, "data/sysdb");
 
-    rdb_instance_ = new RdbInstance(myLog);
+    rdb_instance_ = new RocksdbInstance(myLog);
     if(!rdb_instance_->initialize(data_db_path, sys_db_path)) {
         _log_err(myLog, "rksdb instance initialize failed, db_path[%s] sys_db_path[%s]", data_db_path, sys_db_path);
         return false;
@@ -50,7 +50,7 @@ bool RdbManager::initialize()
     return true;
 }
 
-int32_t RdbManager::put(int32_t ns, int32_t bucket_no, const std::string& key, const std::string& value,
+int32_t RocksdbManager::put(int32_t ns, int32_t bucket_no, const std::string& key, const std::string& value,
                          bool version_care, int32_t expire_time_sec)
 {
     // if( KV_SERVERFLAG_DUPLICATE == key.server_flag ) {
@@ -64,12 +64,12 @@ int32_t RdbManager::put(int32_t ns, int32_t bucket_no, const std::string& key, c
     return rc;
 }
 
-int32_t RdbManager::get(int32_t ns, int32_t bucket_no, const std::string& key, KvEntry& entry)
+int32_t RocksdbManager::get(int32_t ns, int32_t bucket_no, const std::string& key, KvEntry& entry)
 {
     return rdb_instance_->get(ns, bucket_no, key, entry);
 }
 
-bool RdbManager::initBuckets(const CValidBucketMgn & valid_bucket_mgn)
+bool RocksdbManager::initBuckets(const CValidBucketMgn & valid_bucket_mgn)
 {
     m_validBucketMgn = valid_bucket_mgn;
 
@@ -86,13 +86,13 @@ bool RdbManager::initBuckets(const CValidBucketMgn & valid_bucket_mgn)
     return true;
 }
 
-int32_t RdbManager::remove(int32_t ns, int32_t bucket_no, const std::string& key)
+int32_t RocksdbManager::remove(int32_t ns, int32_t bucket_no, const std::string& key)
 {
     int32_t rc = rdb_instance_->remove(ns, bucket_no, key);
     return rc;
 }
 
-// int32_t RdbManager::qpush(int32_t bucket_number, rocksdb::Slice seq_key, rocksdb::Slice value,
+// int32_t RocksdbManager::qpush(int32_t bucket_number, rocksdb::Slice seq_key, rocksdb::Slice value,
 //                           rocksdb::Slice item_key, rocksdb::Slice item, bool version_care,
 //                           int32_t expire_time_sec)
 // {
@@ -106,7 +106,7 @@ int32_t RdbManager::remove(int32_t ns, int32_t bucket_no, const std::string& key
 //     return rdb_instance_->qpush(bucket_number, seq_key, value, item_key, item, expire_time_sec);
 // }
 
-// int32_t RdbManager::qpop(int32_t bucket_number, rocksdb::Slice& seq_key, rocksdb::Slice& value,
+// int32_t RocksdbManager::qpop(int32_t bucket_number, rocksdb::Slice& seq_key, rocksdb::Slice& value,
 //                          rocksdb::Slice& item_key, rocksdb::Slice& item, bool need_clear)
 // {
 //     if( KV_SERVERFLAG_DUPLICATE == seq_key.server_flag ) {
@@ -119,7 +119,7 @@ int32_t RdbManager::remove(int32_t ns, int32_t bucket_no, const std::string& key
 //     return rdb_instance_->qpop(bucket_number, seq_key, value, item_key, item);
 // }
 
-int32_t RdbManager::clear(int32_t area)
+int32_t RocksdbManager::clear(int32_t area)
 {
     if (!rdb_instance_) {
         _log_err(myLog, "clear area failed! area[%d]", area);
@@ -135,7 +135,7 @@ int32_t RdbManager::clear(int32_t area)
     return OP_RETURN_SUCCESS;
 }
 
-// bool RdbManager::beginScan(kv::MigrateInfo& info)
+// bool RocksdbManager::beginScan(kv::MigrateInfo& info)
 // {
 //     {
 //         std::lock_guard<std::mutex> l(mutex);
@@ -156,7 +156,7 @@ int32_t RdbManager::clear(int32_t area)
 //     return true;
 // }
 
-// bool RdbManager::endScan(kv::MigrateInfo& info)
+// bool RocksdbManager::endScan(kv::MigrateInfo& info)
 // {
 //     std::lock_guard<std::mutex> l(mutex);
 //     if (!scan_rdb_instance) {
@@ -169,7 +169,7 @@ int32_t RdbManager::clear(int32_t area)
 //     return true;
 // }
 
-// bool RdbManager::getNextItems(kv::MigrateInfo& info, std::vector<kv::ItemDataInfo*>& list)
+// bool RocksdbManager::getNextItems(kv::MigrateInfo& info, std::vector<kv::ItemDataInfo*>& list)
 // {
 //     if (!scan_rdb_instance) {
 //         _log_err(myLog, "scan bucket not opened! bucket[%d]", info.dbId);
@@ -185,29 +185,29 @@ int32_t RdbManager::clear(int32_t area)
 //     return true;
 // }
 
-void RdbManager::statistics(std::string& info)
+void RocksdbManager::statistics(std::string& info)
 {
     info.append(rdb_instance_->getDbStatisticsInfo());
 }
 
-void RdbManager::dbstats(const std::string& type, std::string& info)
+void RocksdbManager::dbstats(const std::string& type, std::string& info)
 {
     info.append(rdb_instance_->dbstat(type));
 }
 
-void RdbManager::setBucketCount(uint32_t bucket_count)
+void RocksdbManager::setBucketCount(uint32_t bucket_count)
 {
     if (this->bucket_count != 0) return ;
     this->bucket_count = bucket_count;
 }
 
-void RdbManager::compact(const std::string& type, std::string& info)
+void RocksdbManager::compact(const std::string& type, std::string& info)
 {
     rdb_instance_->compact(type, info);
 }
-void RdbManager::compactMannually() { rdb_instance_->compactMannually(); }
+void RocksdbManager::compactMannually() { rdb_instance_->compactMannually(); }
 
-int RdbManager::hash(int h)
+int RocksdbManager::hash(int h)
 {
     h += (h << 15) ^ 0xffffcd7d;
     h ^= (h >> 10);

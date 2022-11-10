@@ -3,12 +3,11 @@ include_directories(BEFORE ${PROJECT_SOURCE_DIR})
 # link_directories(${DEPS_PREFIX_PATH}/lib)
 # link_directories(${DEPS_PREFIX_PATH}/lib64)
 
-set(KVSTORE_SRC ${KVSTORE_SRC_PATH}/rdb/rdb_define.cc
-            	${KVSTORE_SRC_PATH}/rdb/rdb_manager.cc
-           		${KVSTORE_SRC_PATH}/rdb/rdb_instance.cc
-            	$<TARGET_OBJECTS:PUBLIC_OBJ>)
+AUX_SOURCE_DIRECTORY(${KVSTORE_SRC_PATH} KVSTORE_SRC)
+AUX_SOURCE_DIRECTORY(${KVSTORE_SRC_PATH}/raftcc KVSTORE_RAFTCC_SRC)
+AUX_SOURCE_DIRECTORY(${KVSTORE_SRC_PATH}/walstore KVSTORE_WALSTORE_SRC)
 
-add_library(kvstore_lib STATIC ${KVSTORE_SRC})
+add_library(kvstore_lib STATIC ${KVSTORE_SRC} ${KVSTORE_RAFTCC_SRC} ${KVSTORE_WALSTORE_SRC})
 set_target_properties(kvstore_lib PROPERTIES COMPILE_FLAGS "-fPIC")
 
 add_library(KVSTORE_OBJ OBJECT ${KVSTORE_SRC})

@@ -17,11 +17,11 @@ limitations under the License.
 
 #pragma once
 
-#include "kvstore/kv_engine.h"
+#include "kv_engine.h"
 
 #include "public/common.h"
 #include "public/config.h"
-#include "rdb_define.h"
+#include "rocksdb_defs.h"
 #include "common/validbucket.h"
 
 #include "rocksdb/db.h"
@@ -79,12 +79,12 @@ private:
     CValidBucketMgn validBucketMgn;
 };
 
-class RdbInstance
+class RocksdbInstance
 {
 public:
-    RdbInstance(mybase::BaseLogger* logger);
-    explicit RdbInstance(int32_t index, bool db_version_care = false);
-    ~RdbInstance();
+    RocksdbInstance(mybase::BaseLogger* logger);
+    explicit RocksdbInstance(int32_t index, bool db_version_care = false);
+    ~RocksdbInstance();
 
     bool initBuckets(const std::vector<int32_t> buckets) { return true; }
     void setValidBucketMgn(const CValidBucketMgn& valid_bucket_mgn);
@@ -124,9 +124,9 @@ public:
     static int32_t to_kvstore_code(rocksdb::Status& status);
 
 private:
-    int32_t do_get(RdbKey& rksdb_key, std::string& rksdb_item);
-    int32_t do_put(RdbKey& rksdb_key, RdbItem& rksdb_item);
-    int32_t do_remove(RdbKey& rksdb_key);
+    int32_t do_get(RocksdbKey& rksdb_key, std::string& rksdb_item);
+    int32_t do_put(RocksdbKey& rksdb_key, RocksdbItem& rksdb_item);
+    int32_t do_remove(RocksdbKey& rksdb_key);
 
     uint64_t getAreaExpiredTime(int32_t area);
 

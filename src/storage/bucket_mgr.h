@@ -1,4 +1,3 @@
-#include "common/wal.h"
 #include "peer.h"
 #include "common/rpc_mgr.h"
 
@@ -42,7 +41,7 @@ public:
 
 	bool writeAt(uint64_t idx, Buffer::ptr data);
 
-	uint64_t nextIndex() { return walog.nextIndex(); }
+	uint64_t nextIndex() { return 0; }
 
 protected:
 	std::vector<Buffer::ptr> createAppendEntriesReq(Peer::ptr p);
@@ -51,7 +50,6 @@ protected:
 
 protected:
 	uint32_t bucketNo{0};
-	wal::Wal walog;
 
 	uint64_t smCommitIdx{0};
 	uint64_t quickCommitIdx{0};
