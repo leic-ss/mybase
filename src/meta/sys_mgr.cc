@@ -32,22 +32,7 @@ namespace mybase
 
 SysMgr::SysMgr(mybase::BaseLogger* logger) : myLog(logger)
 {
-    char server_table_file_name[256];
-    const char *sz_data_dir = sDefaultConfig.getString(sMetaSection, sDataDir, sDefaultDataDir);
-    snprintf(server_table_file_name, 256, "%s/server_table", sz_data_dir);
-
-    tableMgr.setLogger(logger);
-    if(tableMgr.open(server_table_file_name)) {
-        if((*tableMgr.migrateBlockCount) > 0) {
-            _log_info(myLog, "restore migrate machine list, size: %d", *tableMgr.migrateBlockCount);
-            fillMigrateMachine();
-        }
-        deflateHashTable();
-
-        _log_info(myLog, "open %s success!", server_table_file_name);
-    } else {
-        _log_info(myLog, "open %s success!", server_table_file_name);
-    }
+    
 }
 
 SysMgr::~SysMgr()
@@ -124,95 +109,8 @@ bool SysMgr::stop()
 
 int32_t SysMgr::fillMigrateMachine()
 {
-    int32_t migrate_count = 0;
-    migrateMachine.clear();
-
-    for(uint32_t i = 0; i < tableMgr.getBucketCount(); i++) {
-        if (tableMgr.mHashTable[i] == 0) {
-            _log_err(myLog, "fill_migrate_machine should not run here,bucket: %u", i);
-            continue;
-        }
-
-        bool migrate_this_bucket = false;
-        do {
-            if(tableMgr.mHashTable[i] != tableMgr.dHashTable[i]) {
-                migrate_this_bucket = true;
-                break;
-            }
-
-            for(uint32_t j = 1; j < tableMgr.getCopyCount(); j++) {
-                bool found = false;
-                for(uint32_t k = 1; k < tableMgr.getCopyCount(); k++) {
-                    if(tableMgr.dHashTable[j * tableMgr.getBucketCount() + i]
-                            == tableMgr.mHashTable[k * tableMgr.getBucketCount() + i]) {
-                        found = true;
-                        break;
-                    }
-                }
-
-                if(found == false) {
-                    migrate_this_bucket = true;
-                    break;
-                }
-            }
-        } while(false);
-
-        if(migrate_this_bucket) {
-            migrateMachine[tableMgr.mHashTable[i]]++;
-            migrate_count++;
-            _log_warn(myLog, "added migrating bucket[%d] machine[%s]",
-                      i, NetHelper::addr2String(tableMgr.mHashTable[i]).c_str());
-        }
-    }
-
-    return migrate_count;
+    return 0;
 }
-
-// void SysMgr::setMigratingHashtable(uint32_t bucket_no, uint64_t srv_id)
-// {
-//     bool ret = false;
-//     if(bucket_no > tableMgr.getBucketCount()) {
-//         _log_err(myLog, "invalid bucket %d", bucket_no);
-//         return;
-//     }
-
-//     if(tableMgr.mHashTable[bucket_no] != srv_id) {
-//         _log_err(myLog, "invalid message! bucket_no: %u, m_server: %s, server: %s",
-//                  bucket_no, NetHelper::addr2String(tableMgr.mHashTable[bucket_no]).c_str(),
-//                  NetHelper::addr2String(srv_id).c_str());
-//         return;
-//     }
-
-//     for(uint32_t i = 0; i < tableMgr.getCopyCount(); i++) {
-//         uint32_t idx = i * tableMgr.getBucketCount() + bucket_no;
-//         if(tableMgr.mHashTable[idx] != tableMgr.dHashTable[idx])
-//         {
-//             tableMgr.mHashTable[idx] = tableMgr.dHashTable[idx];
-//             ret = true;
-//         }
-//     }
-
-//     if(ret == true)
-//     {
-//         (*tableMgr.migrateBlockCount)--;
-//         auto it = migrateMachine.find(srv_id);
-//         assert(it != migrateMachine.end());
-//         it->second--;
-//         if(it->second == 0) {
-//             migrateMachine.erase(it);
-//         }
-
-//         _log_info(myLog, "setMigratingHashtable bucketNo %d server: %s, finish migrate this bucket",
-//                   bucket_no, NetHelper::addr2String(srv_id).c_str());
-//         _log_info(myLog, "waiting migrate dataserver num: %d", migrateMachine.size());
-
-//         for( auto iter = migrateMachine.begin(); iter != migrateMachine.end(); ++iter )
-//         {
-//             _log_info(myLog, "waiting migrate dataserver count: %s:%d",
-//                       NetHelper::addr2String(iter->first).c_str(), iter->second);
-//         }
-//     }
-// }
 
 void SysMgr::setStatInfo(uint64_t server_id, const NodeStatInfo& node_info)
 {
@@ -228,25 +126,7 @@ void SysMgr::serverCheck()
 {
     while (running) {
 
-        uint32_t curtime = TimeHelper::currentSec();
 
-        auto node_list = sysData.mutable_nodelist();
-        for (auto& node : *node_list) {
-            auto& server_info = node.second;
-            uint32_t lasttime = server_info.lasttime();
-            int32_t status = server_info.status();
-
-            if ( (status == ServerInfo_Status_Alive) && (curtime > lasttime) &&
-                 ((curtime - lasttime) >= 4) ) {
-                _log_warn(myLog, "server %s is down! lasttime: %u",
-                          NetHelper::addr2String(server_info.serverid()).c_str(), lasttime);
-
-                server_info.set_status(ServerInfo_Status_Down);
-                rebuildQuickTable();
-            }
-        }
-
-        checkMigrateComplete();
 
         KVSLEEP(running, 1);
     }
@@ -256,13 +136,9 @@ void SysMgr::getStatInfo(uint64_t server_id, NodeStatInfo& node_info)
 {
     statInfoRwLocker.wrlock();
     if(server_id == 0) {
-        // _log_info(myLog, "getStatInfo: ");
         for(auto it = statInfo.begin(); it != statInfo.end(); it++) {
-            // _log_info(myLog, "getStatInfo: %lu", it->first);
             if (availableServer.find(it->first) != availableServer.end()) {
-                // _log_info(myLog, "getStatInfo 2: %lu, size = %d", it->first, it->second.getStatData().size());
                 node_info.update_stat_info(it->second);
-                // _log_info(myLog, "getStatInfo 2: %lu, size = %d", it->first, node_info.getStatData().size());
             }
         }
     } else {
@@ -277,28 +153,17 @@ void SysMgr::getStatInfo(uint64_t server_id, NodeStatInfo& node_info)
 
 const uint64_t* SysMgr::getHashTable(int32_t mode) const
 {
-    if(mode == 0) {
-        return tableMgr.hashTable;
-    } else if(mode == 1) {
-        return tableMgr.mHashTable;
-    }
-    return tableMgr.dHashTable;
+    return nullptr;
 }
 
 const char *SysMgr::getHashTableDeflateData(int32_t mode) const
 {
-    if(mode == 0) {
-        return tableMgr.hashTableDeflateDataForClient;
-    }
-    return tableMgr.hashTableDeflateDataForDataServer;
+    return nullptr;
 }
 
 int32_t SysMgr::getHashTableDeflateSize(int32_t mode) const
 {
-    if(mode == 0) {
-        return tableMgr.hashTableDeflateDataForClientSize;
-    }
-    return tableMgr.hashTableDeflateDataForDataServerSize;
+    return 0;
 }
 
 bool SysMgr::openSysDB()
@@ -362,7 +227,9 @@ bool SysMgr::addStorageServer(uint64_t srv_id)
         return false;
     }
 
-    rocksdb::Status s = sysDb->Put(rocksdb::WriteOptions(), sNamespaceKey, data);
+    rocksdb::WriteBatch batch;
+    batch.Put(sNamespaceKey, data);
+    rocksdb::Status s = sysDb->Write(rocksdb::WriteOptions(), &batch);
     if (!s.ok()) {
         _log_err(myLog, "add storage server failed! srv[%s] err[%s]",
                  NetHelper::addr2String(srv_id).c_str(), s.ToString().c_str());
@@ -372,35 +239,64 @@ bool SysMgr::addStorageServer(uint64_t srv_id)
     return true;
 }
 
+bool SysMgr::rmvStorageServer(uint64_t srv_id)
+{
+    auto node_list = sysData.mutable_nodelist();
+    auto iter = (*node_list).find(srv_id);
+    if ( iter != (*node_list).end() ) {
+        (*node_list).erase(iter);
+    } else {
+        return true;
+    }
+
+    std::string data;
+    if (!sysData.SerializeToString(&data)) {
+        _log_err(myLog, "add storage server failed! srv[%s]", NetHelper::addr2String(srv_id).c_str());
+        return false;
+    }
+
+    rocksdb::WriteBatch batch;
+    batch.Put(sNamespaceKey, data);
+    rocksdb::Status s = sysDb->Write(rocksdb::WriteOptions(), &batch);
+    if (!s.ok()) {
+        _log_err(myLog, "add storage server failed! srv[%s] err[%s]",
+                 NetHelper::addr2String(srv_id).c_str(), s.ToString().c_str());
+        return false;
+    }
+
+    return true;
+}
+
+std::vector<ServerInfo> SysMgr::getStorageServer(uint64_t srv_id)
+{
+    std::vector<ServerInfo> servers;
+
+    auto& nmap = sysData.nodelist();
+    if (srv_id != 0) {
+        auto iter = nmap.find(srv_id);
+        if (iter != nmap.end()) {
+            servers.push_back(iter->second);
+        }
+
+        return servers;
+    }
+
+    for (auto& ele : nmap) {
+        servers.push_back(ele.second);
+    }
+
+    return std::move(servers);
+}
+
 bool SysMgr::loadConfig()
 {
-    int32_t bucket_count = sDefaultConfig.getInt(sMetaServer, sGroupDataBucketNumber, sDefaultBucketNumber);
-    int32_t copy_count = sDefaultConfig.getInt(sMetaServer, sStrCopyCount, sDefaultCopyCountNumber);
-    if( !tableMgr.isFileOpened() ) {
-        char file_name[256];
-        const char *sz_data_dir = sDefaultConfig.getString(sMetaServer, sDataDir, sDefaultDataDir);
-        snprintf(file_name, 256, "%s/server_table", sz_data_dir);
+    bucket_count = sDefaultConfig.getInt(sMetaServer, sGroupDataBucketNumber, sDefaultBucketNumber);
+    copy_count = sDefaultConfig.getInt(sMetaServer, sStrCopyCount, sDefaultCopyCountNumber);
 
-        bool tmp_ret = tableMgr.create(file_name, bucket_count, copy_count);
-        (void)(tmp_ret);
-
-        _log_info(myLog, "set bucket count = %u ok", tableMgr.getBucketCount());
-        _log_info(myLog, "set copy count = %u ok", tableMgr.getCopyCount());
+    for (int32_t i = 0; i < copy_count; i++) {
+        std::vector< std::pair<uint64_t, uint32_t> > vec(bucket_count, {0, 0});
+        curSysTable[i] = vec;
     }
-
-    _log_debug(myLog, "loadconfig, lastVersion: %d",
-               (tableMgr.lastLoadConfigTime ? *tableMgr.lastLoadConfigTime : 0) );
-
-    minConfigVersion = sDefaultConfig.getInt(sMetaServer, sStrMinConfigversion, sMinConfigVersion);
-    if(minConfigVersion < sMinConfigVersion) {
-        _log_err(myLog, "%s must large than %d. set it to %d", sStrMinConfigversion, sMinConfigVersion, sMinConfigVersion);
-        minConfigVersion = sMinConfigVersion;
-    }
-
-    uint64_t old_pos_mask = posMask;
-    posMask = strtoll(sDefaultConfig.getString(sMetaServer, sStrPosMask, "0"), nullptr, 10);
-    if(posMask == 0) posMask = sDefaultPosMask;
-    _log_info(myLog, "%s = %llX", sStrPosMask, posMask);
 
     return true;
 }
@@ -411,10 +307,10 @@ void SysMgr::getUpNode(std::vector<ServerInfo>& upnode_list)
 
     auto& nmap = sysData.nodelist();
     for(auto& ele : nmap) {
-        if(ele.second.status() != ServerInfo::Alive) {
-            _log_info(myLog, "skip inactive node: <%s>", NetHelper::addr2String(ele.second.serverid()).c_str());
-            continue;
-        }
+        // if(ele.second.status() != ServerInfo::Alive) {
+        //     _log_info(myLog, "skip inactive node: <%s>", NetHelper::addr2String(ele.second.serverid()).c_str());
+        //     continue;
+        // }
 
         _log_info(myLog, "get up node: <%s>", NetHelper::addr2String(ele.second.serverid()).c_str());
         upnode_list.push_back(ele.second);
@@ -499,128 +395,56 @@ void SysMgr::rebuild()
         }
     }
 
-    TableBuilder* p_table_builder = new TableBuilder(tableMgr.getBucketCount(), tableMgr.getCopyCount());
+    TableBuilder p_table_builder(bucket_count, copy_count);
 
-    p_table_builder->setLogger(myLog);
-    p_table_builder->setAvailableServer(upnode_list);
-	p_table_builder->printAvailableServer();
+    p_table_builder.setLogger(myLog);
+    p_table_builder.setAvailableServer(upnode_list);
+	p_table_builder.printAvailableServer();
 
-    TableBuilder::hash_table_type hash_table_for_builder_tmp;
-    p_table_builder->loadHashTable(hash_table_for_builder_tmp, tableMgr.mHashTable);
-
-    TableBuilder::hash_table_type quick_table_tmp = hash_table_for_builder_tmp;
-    if( (tableMgr.getCopyCount() > 1) &&
-        first_run == false ) {
-        _log_info(myLog, "will build quick table");
-        p_table_builder->printHashTable(quick_table_tmp);
-
-        if( !( p_table_builder->buildQuickTable(quick_table_tmp) ) ) {
-            delete p_table_builder;
-
-            incrVersion(tableMgr.clientVersion);
-            incrVersion(tableMgr.serverVersion);
-
-            _log_err(myLog, "build quich table error!");
-
-            // APPEND RAFT LOG
-            return;
-        }
-
-        _log_info(myLog, "quick table build ok,new quick hashtable");
-        p_table_builder->printHashTable(quick_table_tmp);
-    }
-
-    TableBuilder::hash_table_type dest_hash_table_for_builder_tmp;
-    int32_t ret = p_table_builder->rebuildTableNew(quick_table_tmp, dest_hash_table_for_builder_tmp);
+    SysTableType quick_table_tmp = curSysTable;
+    SysTableType dest_hash_table_for_builder_tmp = quick_table_tmp;
+    int32_t ret = p_table_builder.rebuildTableNew(quick_table_tmp, dest_hash_table_for_builder_tmp);
 
     if( BUILD_NO_CHANGE == ret ) {
-        delete p_table_builder;
         return;
     } else if(ret == 0) {
         _log_err(myLog, "build table fail. fatal error.");
 
-        delete p_table_builder;
         return;
     }
 
-    p_table_builder->writeHashTable(dest_hash_table_for_builder_tmp, tableMgr.dHashTable);
+    /*for (int32_t i = 0; i < bucket_count; i++) {
 
-    if( !first_run ) {
-        _log_info(myLog, "need migrate write quick table to _p_hashTable");
-        p_table_builder->writeHashTable(quick_table_tmp, tableMgr.mHashTable);
-        p_table_builder->writeHashTable(quick_table_tmp, tableMgr.hashTable);
+        std::string str;
+        for (int32_t j = 0; j < copy_count; j++) {
+            auto vec = dest_hash_table_for_builder_tmp[j];
 
-        if(tableMgr.getCopyCount() <= 1) {
-            uint32_t total_count = tableMgr.getBucketCount() * tableMgr.getCopyCount();
-            for(uint32_t i = 0; i < total_count; i++) {
-                if(availableServer.find(tableMgr.mHashTable[i])== availableServer.end()) {
-                    tableMgr.mHashTable[i] = tableMgr.dHashTable[i];
-                    tableMgr.hashTable[i] = tableMgr.dHashTable[i];
-                }
-            }
+            str += NetHelper::addr2String( vec[i].first ) + " " + std::to_string( vec[i].second ) + ", ";
         }
-    } else {
-        _log_info(myLog, "need`t migrate write original table to _p_hashTable");
-        p_table_builder->writeHashTable(dest_hash_table_for_builder_tmp, tableMgr.mHashTable);
-        p_table_builder->writeHashTable(dest_hash_table_for_builder_tmp, tableMgr.hashTable);
 
-        tableMgr.produceMd5();
-    }
+        _log_info(myLog, "partition %u -> %s", i, str.substr(0, str.size() - 1).c_str());
+    }*/
 
-    _log_info(myLog, "_confServerTableManager._p_hashTable");
+    for (int32_t i = 0; i < bucket_count; i++) {
 
-    tableMgr.logPrintTable(tableMgr.getHashTable());
+        /*auto leader_vec = dest_hash_table_for_builder_tmp[0];
+        uint64_t leader = leader_vec[i].first;
 
-    _log_info(myLog, "_mhashTable");
-    tableMgr.logPrintTable(tableMgr.getMHashTable());
+        for (int32_t j = 1; j < copy_count; j++) {
+            auto follower_vec = dest_hash_table_for_builder_tmp[j];
+            uint64_t follower = follower_vec[i];
 
-    _log_info(myLog, "_dhashTable");
-    tableMgr.logPrintTable(tableMgr.getDHashTable());
 
-    int32_t diff_count = 0;
-    if(first_run == false) {
-        diff_count = fillMigrateMachine();
-    }
+        }*/
 
-    (*tableMgr.migrateBlockCount) = diff_count > 0 ? diff_count : -1;
-    incrVersion(tableMgr.clientVersion);
-    incrVersion(tableMgr.serverVersion);
-    incrVersion(tableMgr.namespaceCapacityVersion);
-    _log_info(myLog, "version changed: clientVersion: %u serverVersion: %u namespaceCapacityVersion: %u migrateBlockCount: %d",
-              *tableMgr.clientVersion, *tableMgr.serverVersion, *tableMgr.namespaceCapacityVersion, diff_count);
-    deflateHashTable();
+        for (int32_t j = 0; j < copy_count; j++) {
+            auto& vec = dest_hash_table_for_builder_tmp[j];
+            uint64_t node = vec[i].first;
 
-    do {
-        diff_count = 0;
-        for(uint32_t i = 0; i < tableMgr.getBucketCount(); i++) {
-            for(uint32_t j = 0; j < tableMgr.getCopyCount(); j++) {
-                bool migrate_it = true;
-                for(uint32_t k = 0; k < tableMgr.getCopyCount(); ++k) {
-                    if(tableMgr.dHashTable[i +tableMgr.getBucketCount() *j ] ==
-                            tableMgr.mHashTable[i +tableMgr.getBucketCount() *k]) {
-                        migrate_it = false;
-                        break;
-                    }
-                }
-
-                if(migrate_it) {
-                    diff_count++;
-                }
-            }
+            
         }
-    } while (false);
-
-    _log_warn(myLog, "different ratio is : migrateCount:%d/%d=%.2f%%",
-              diff_count, tableMgr.getBucketCount() * tableMgr.getCopyCount(),
-              ( 100.0 * diff_count / (tableMgr.getBucketCount() * tableMgr.getCopyCount()) ) );
-
-    if(diff_count > 0) {
-        _log_warn(myLog, "need migrate, count: %d", diff_count);
     }
 
-    printServerCount();
-
-    delete p_table_builder;
     return;
 }
 
@@ -640,9 +464,6 @@ bool SysMgr::doFinishMigrate(uint64_t server_id, uint32_t server_version, int32_
 
 bool SysMgr::createNameSpace(uint32_t ns, uint64_t capacity)
 {
-    incrVersion(tableMgr.namespaceCapacityVersion);
-    tableMgr.produceMd5();
-
     auto nmap = sysData.mutable_namespaces();
     (*nmap)[ns] = capacity;
 
@@ -652,9 +473,12 @@ bool SysMgr::createNameSpace(uint32_t ns, uint64_t capacity)
         return false;
     }
 
-    rocksdb::Status s = sysDb->Put(rocksdb::WriteOptions(), sNamespaceKey, data);
+    rocksdb::WriteBatch batch;
+    batch.Put(sNamespaceKey, data);
+    rocksdb::Status s = sysDb->Write(rocksdb::WriteOptions(), &batch);
     if (!s.ok()) {
-        _log_err(myLog, "write namespace failed! ns[%u] capacity[%lu] err[%s]", ns, capacity, s.ToString().c_str());
+        _log_err(myLog, "write namespace failed! ns[%u] capacity[%lu] err[%s]",
+                 ns, capacity, s.ToString().c_str());
         return false;
     }
 
@@ -848,8 +672,8 @@ bool SysMgr::doHeartbeat(uint64_t srv_id)
 void SysMgr::incrVersion(uint32_t* value, const uint32_t inc_step)
 {
     (*value) += inc_step;
-    if(minConfigVersion > (*value)) {
-        (*value) = minConfigVersion;
+    if(metaVersion > (*value)) {
+        (*value) = metaVersion;
     }
 }
 

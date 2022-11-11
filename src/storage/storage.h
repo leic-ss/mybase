@@ -88,6 +88,14 @@ protected:
 	void handleServerInfo(struct evhttp_request *req);
 
 protected:
+    void handleDbStats(struct evhttp_request* req);
+    void handleGetLogLevel(struct evhttp_request* req);
+    void handleSetLogLevel(struct evhttp_request* req);
+    void handleOpenfalconReport(struct evhttp_request* req);
+
+    void handleInitRaft(struct evhttp_request* req);
+
+protected:
 	void formatStatRun();
 	void formatStat(uint32_t report_timestamp);
 	std::string getFormatStat();

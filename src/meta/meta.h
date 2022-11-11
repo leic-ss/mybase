@@ -48,7 +48,7 @@ public:
 	void setLogger(mybase::BaseLogger* logger);
 
 protected:
-	bool initServer();
+    bool initServer();
     bool startServer();
     bool stopServer();
 
@@ -70,7 +70,7 @@ protected:
 	void handleRmvMetaServer(struct evhttp_request* req);
 	void handleGetCluster(struct evhttp_request* req);
 	void handleNameSpaceCreate(struct evhttp_request* req);
-	void handleNameSpaceList(struct evhttp_request* req);
+	void handleListNameSpace(struct evhttp_request* req);
 	void handleLocate(struct evhttp_request* req);
 	void handleStat(struct evhttp_request* req);
 	void handlePut(struct evhttp_request* req);
@@ -78,7 +78,9 @@ protected:
 	void handleDel(struct evhttp_request* req);
 
 	void handleAddStorageServer(struct evhttp_request* req);
-	void handleBuildTable(struct evhttp_request* req);
+	void handleListStorageServer(struct evhttp_request* req);
+	void handleRmvStorageServer(struct evhttp_request* req);
+	void handleRebalance(struct evhttp_request* req);
 
 protected:
 	void formatStatRun();
@@ -92,7 +94,7 @@ private:
     mybase::AdminServer adminServer;
     std::thread monitorThread;
 
-    SysMgr* sysMgr{nullptr};
+    std::shared_ptr<SysMgr> sysMgr{nullptr};
 };
 
 }

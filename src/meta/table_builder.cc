@@ -334,6 +334,11 @@ int TableBuilder::rebuildTableNew(const hash_table_type & hash_table_source, has
     initCandidateNew(s_migrate_node_info, tokens_per_node_min, tokens_count_in_node);
     initCandidateNew(m_migrate_node_info, m_tokens_per_node_min, mtokens_count_in_node);
 
+    for (auto ele : s_migrate_node_info) {
+        _log_info(myLog, "%s %d %d",
+                  NetHelper::addr2String(ele.first.first).c_str(), ele.first.second, ele.second);
+    }
+
     if(availableServer.size() < copyCount) {
         _log_err(myLog, "rebuild table fail, available size: %u, copy count: %u", availableServer.size(), copyCount);
         return BUILD_ERROR;
@@ -435,10 +440,12 @@ int TableBuilder::rebuildTableNew(const hash_table_type & hash_table_source, has
     if (hash_table_result[0][0].first == INVALID_FLAG) {
         for(uint32_t i=0; i<bucketCount; i++) {
             if(hash_table_result[0][i].first != INVALID_FLAG) {
-                _log_err(myLog, "There is not INVALID_FLAG in hashtable for the first time!");
+                _log_err(myLog, "There is not INVALID_FLAG in hashtable for the first time! %d",
+                         hash_table_result[0][i].first);
                 return BUILD_ERROR;
             }
         }
+        _log_info(myLog, "build first time");
         if(!buildFirstTime(hash_table_result)) {
             return BUILD_ERROR;
         } else {
@@ -646,13 +653,13 @@ void TableBuilder::initBucketSet(hash_table_type & hash_table_source)
         uint32_t master_index = 0;
         if(availableServer.find(hash_table_source[master_index][i]) != availableServer.end())
         {
-            _log_info(myLog, "init_bucket_set bucket_count %u copy_count[0] %s.",
-                      bucketCount, NetHelper::addr2String(hash_table_source[master_index][i].first).c_str());
+            // _log_info(myLog, "init_bucket_set bucket_count %u copy_count[0] %s.",
+            //           bucketCount, NetHelper::addr2String(hash_table_source[master_index][i].first).c_str());
             m_buckets_set[hash_table_source[master_index][i]].insert(std::pair<uint32_t, uint32_t>(i, master_index));
 
             for(uint32_t j = 1; j < copyCount; j++) {
-                _log_info(myLog, "init_bucket_set bucket_count %u copy_count[%d] %s.",
-                          bucketCount, j, NetHelper::addr2String(hash_table_source[master_index][i].first).c_str());
+                // _log_info(myLog, "init_bucket_set bucket_count %u copy_count[%d] %s.",
+                //           bucketCount, j, NetHelper::addr2String(hash_table_source[master_index][i].first).c_str());
                 s_buckets_set[hash_table_source[j][i]].insert(std::pair<uint32_t, uint32_t>(i, j));
             }
         }

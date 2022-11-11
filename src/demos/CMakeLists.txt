@@ -95,6 +95,12 @@ target_link_libraries(rpcserver ${FULL_BUILD_DEPS})
 #add_executable(sigdemo ${DEMO_SIGDEMO_SRC})
 #target_link_libraries(sigdemo ${FULL_BUILD_DEPS})
 
+set(DEMO_HTTPLIBDEMO_SRC ${DEMO_OTHERS_SRC_PATH}/httplibdemo.cc
+                    $<TARGET_OBJECTS:COMMON_OBJ>
+                    $<TARGET_OBJECTS:PUBLIC_OBJ>)
+add_executable(httplibdemo ${DEMO_HTTPLIBDEMO_SRC})
+target_link_libraries(httplibdemo ${FULL_BUILD_DEPS})
+
 #set(DEMO_EVTIMER_SRC ${DEMO_SAMPLEF_SRC_PATH}/evtimer.cc
 #                    $<TARGET_OBJECTS:COMMON_OBJ>
 #                    $<TARGET_OBJECTS:PUBLIC_OBJ>

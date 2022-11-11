@@ -32,6 +32,7 @@ limitations under the License.
 #include <map>
 #include <set>
 #include <unordered_map>
+#include <unordered_set>
 #include <mutex>
 
 namespace mybase
@@ -46,6 +47,9 @@ struct ServerInfoCmp {
 class SysMgr
 {
 public:
+    using SysTableType = std::map<int32_t, std::vector< std::pair<uint64_t, uint32_t> >>;
+
+public:
     SysMgr(mybase::BaseLogger* logger=nullptr);
     ~SysMgr();
 
@@ -59,6 +63,8 @@ public:
     void setLogger(mybase::BaseLogger* logger) { myLog = logger; }
 
     bool addStorageServer(uint64_t srv_id);
+    bool rmvStorageServer(uint64_t srv_id);
+    std::vector<ServerInfo> getStorageServer(uint64_t srv_id);
 
     uint32_t getNsCapacityVersion() const { return *tableMgr.namespaceCapacityVersion; }
     std::map<uint32_t, uint64_t> getNamespaceCapacityInfo();
@@ -120,7 +126,7 @@ public:
 private:
     std::set<uint64_t> availableServer;
 
-    uint32_t minConfigVersion{sMinConfigVersion};
+    uint32_t metaVersion{sMinMetaVersion};
 
     std::map<uint64_t, int32_t> migrateMachine;
 
@@ -128,9 +134,12 @@ private:
     std::vector<rocksdb::ColumnFamilyDescriptor> sysCfDescs;
     std::vector<rocksdb::ColumnFamilyHandle*> sysCfHandles;
 
-    SysData sysData;
+    int32_t bucket_count;
+    int32_t copy_count;
 
-    uint64_t posMask{sDefaultPosMask};
+    SysData sysData;
+    SysTableType curSysTable;
+    SysTableType dstSysTable;
 
     std::map<uint64_t, NodeStatInfo> statInfo;
     RWSimpleLock statInfoRwLocker;

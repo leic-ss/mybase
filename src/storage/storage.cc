@@ -261,138 +261,97 @@ void StorageServer::registerHttpCallbacks()
 {
 	adminServer.regHandler("/api/v1/serverinfo",
 				std::bind(&StorageServer::handleServerInfo, this, std::placeholders::_1));
-
-    adminServer.regHandler("/openfalcon_report", [this] (struct evhttp_request *req) {
-        std::string mime_type("application/json; charset=utf-8");
-        evhttp_add_header(evhttp_request_get_output_headers(req), "Content-Type", "0");
-        evhttp_add_header(evhttp_request_get_output_headers(req), mime_type.c_str(), "1");
-        std::string rsp_body = getFormatStat();
-        mybase::AdminServer::httpOk(req, 200, rsp_body);
-    });
+    adminServer.regHandler("/api/v1/openfalconReport",
+                std::bind(&StorageServer::handleOpenfalconReport, this, std::placeholders::_1));
 
     // curl 127.0.0.1:7191/api/v1/dbstats?type=rocksdb.dbstats
-    adminServer.regHandler("/api/v1/dbstats", [this] (struct evhttp_request *req) {
-        // kv::storage::KvEngine* engine = kvManager->getKvEngine();
-        // mybase::AdminServer::HttpMap params = mybase::AdminServer::parseParams(req);
+    adminServer.regHandler("/api/v1/dbStats",
+                std::bind(&StorageServer::handleDbStats, this, std::placeholders::_1));
+    adminServer.regHandler("/api/v1/getLogLevel",
+                std::bind(&StorageServer::handleGetLogLevel, this, std::placeholders::_1));
+    adminServer.regHandler("/api/v1/setLogLevel",
+                std::bind(&StorageServer::handleSetLogLevel, this, std::placeholders::_1));
 
-        // std::string type;
-        // if (params.find("type") != params.end()) {
-        //     type = params["type"];
-        // } else {
-        //     httpError(req, 404, "Failed as miss stat type!\n");
-        //     return ;
-        // }
+    adminServer.regHandler("/api/v1/raft/init",
+                std::bind(&StorageServer::handleInitRaft, this, std::placeholders::_1));
+}
 
-        // std::string info;
-        // engine->dbstats(type, info);
-        // info.append("\n");
-        // mybase::AdminServer::httpOk(req, 200, info);
-    });
+void StorageServer::handleOpenfalconReport(struct evhttp_request* req)
+{
+    std::string mime_type("application/json; charset=utf-8");
+    evhttp_add_header(evhttp_request_get_output_headers(req), "Content-Type", "0");
+    evhttp_add_header(evhttp_request_get_output_headers(req), mime_type.c_str(), "1");
+    std::string rsp_body = getFormatStat();
+    mybase::AdminServer::httpOk(req, 200, rsp_body);
+}
 
-    adminServer.regHandler("/api/v1/getLogLevel", [this] (struct evhttp_request *req) {
-        std::string mime_type("application/json; charset=utf-8");
-        evhttp_add_header(evhttp_request_get_output_headers(req), "Content-Type", "0");
-        evhttp_add_header(evhttp_request_get_output_headers(req), mime_type.c_str(), "1");
+void StorageServer::handleInitRaft(struct evhttp_request* req)
+{
+    
+}
 
-        nlohmann::json obj;
-        obj["level"] = "uninitialized!";
-        if (myLog) obj["level"] = myLog->getLogLevelStr();
-        mybase::AdminServer::httpOk(req, 200, obj.dump());
-    });
+void StorageServer::handleDbStats(struct evhttp_request* req)
+{
 
-    adminServer.regHandler("/api/v1/setLogLevel", [this] (struct evhttp_request *req) {
-        std::string mime_type("application/json; charset=utf-8");
-        evhttp_add_header(evhttp_request_get_output_headers(req), "Content-Type", "0");
-        evhttp_add_header(evhttp_request_get_output_headers(req), mime_type.c_str(), "1");
+}
 
-        if (req->type != evhttp_cmd_type::EVHTTP_REQ_POST) {
-            httpError(req, 400, "not a post request!");
-            return ;
+void StorageServer::handleGetLogLevel(struct evhttp_request* req)
+{
+    std::string mime_type("application/json; charset=utf-8");
+    evhttp_add_header(evhttp_request_get_output_headers(req), "Content-Type", "0");
+    evhttp_add_header(evhttp_request_get_output_headers(req), mime_type.c_str(), "1");
+
+    nlohmann::json obj;
+    obj["level"] = "uninitialized!";
+    if (myLog) obj["level"] = myLog->getLogLevelStr();
+    mybase::AdminServer::httpOk(req, 200, obj.dump());
+}
+
+void StorageServer::handleSetLogLevel(struct evhttp_request* req)
+{
+    std::string mime_type("application/json; charset=utf-8");
+    evhttp_add_header(evhttp_request_get_output_headers(req), "Content-Type", "0");
+    evhttp_add_header(evhttp_request_get_output_headers(req), mime_type.c_str(), "1");
+
+    if (req->type != evhttp_cmd_type::EVHTTP_REQ_POST) {
+        httpError(req, 400, "not a post request!");
+        return ;
+    }
+
+    std::string content = mybase::AdminServer::readContent(req);
+    if (content.empty()) {
+        httpError(req, 400, "empty content in post request!");
+        return ;
+    }
+
+    nlohmann::json json_obj;
+    if (!jsonParse(content, json_obj)) {
+        httpError(req, 400, "invalid json format!");
+        return ;
+    }
+
+    if (json_obj["level"].is_null()) {
+        httpError(req, 400, "missing log level!");
+        return ;
+    }
+
+    nlohmann::json obj;
+    try {
+        std::string level = json_obj["level"].get<std::string>();
+        if (myLog) {
+            obj["desc"] = "success!";
+            obj["old"] = myLog->getLogLevelStr();
+            myLog->setLogLevel(level.c_str());
+            obj["new"] = myLog->getLogLevelStr();
+        } else {
+            obj["desc"] = "not success!";
         }
+    } catch (std::exception& e) {
+        httpError(req, 400, "exception: " + std::string(e.what()));
+        return ;
+    }
 
-        std::string content = mybase::AdminServer::readContent(req);
-        if (content.empty()) {
-            httpError(req, 400, "empty content in post request!");
-            return ;
-        }
-
-        nlohmann::json json_obj;
-        if (!jsonParse(content, json_obj)) {
-            httpError(req, 400, "invalid json format!");
-            return ;
-        }
-
-        if (json_obj["level"].is_null()) {
-            httpError(req, 400, "missing log level!");
-            return ;
-        }
-
-        nlohmann::json obj;
-        try {
-            std::string level = json_obj["level"].get<std::string>();
-            if (myLog) {
-                obj["desc"] = "success!";
-                obj["old"] = myLog->getLogLevelStr();
-                myLog->setLogLevel(level.c_str());
-                obj["new"] = myLog->getLogLevelStr();
-            } else {
-                obj["desc"] = "not success!";
-            }
-        } catch (std::exception& e) {
-            httpError(req, 400, "exception: " + std::string(e.what()));
-            return ;
-        }
-
-        mybase::AdminServer::httpOk(req, 200, obj.dump());
-    });
-
-    adminServer.regHandler("/api/v1/setMigThrough", [this] (struct evhttp_request *req) {
-        std::string mime_type("application/json; charset=utf-8");
-        evhttp_add_header(evhttp_request_get_output_headers(req), "Content-Type", "0");
-        evhttp_add_header(evhttp_request_get_output_headers(req), mime_type.c_str(), "1");
-
-        if (req->type != evhttp_cmd_type::EVHTTP_REQ_POST) {
-            httpError(req, 400, "not a post request!");
-            return ;
-        }
-
-        std::string content = mybase::AdminServer::readContent(req);
-        if (content.empty()) {
-            httpError(req, 400, "empty content in post request!");
-            return ;
-        }
-
-        nlohmann::json json_obj;
-        if (!jsonParse(content, json_obj)) {
-            httpError(req, 400, "invalid json format!");
-            return ;
-        }
-
-        if (json_obj["throughput"].is_null()) {
-            httpError(req, 400, "missing throughput field!");
-            return ;
-        }
-
-        // if (!requstManager) {
-        //     httpError(req, 500, "request manager is nullptr!");
-        //     return ;
-        // }
-
-        nlohmann::json obj;
-        try {
-            int64_t throughput = json_obj["throughput"].get<int64_t>();
-
-            // requstManager->setMaxThroughput(throughput);
-
-            obj["code"] = 0;
-            obj["message"] = "success!";
-        } catch (std::exception& e) {
-            httpError(req, 400, "exception: " + std::string(e.what()));
-            return ;
-        }
-
-        mybase::AdminServer::httpOk(req, 200, obj.dump());
-    });
+    mybase::AdminServer::httpOk(req, 200, obj.dump());
 }
 
 void StorageServer::formatStat(uint32_t report_timestamp)

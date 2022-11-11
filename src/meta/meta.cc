@@ -165,8 +165,7 @@ bool MetaServer::initServer()
     int32_t local_port = sDefaultConfig.getInt(sMetaSection, sServerPort, sDefaultServerPort);
     NetHelper::sLocalServerAddr = NetHelper::ipAndPort(local_ip, local_port);
 
-    sysMgr = new SysMgr(myLog);
-    sysMgr->setLogger(myLog);
+    sysMgr = std::make_shared<SysMgr>(myLog);
     sysMgr->loadConfig();
     sysMgr->openSysDB();
     sysMgr->loadSysData();
@@ -203,7 +202,7 @@ void MetaServer::registerHttpCallbacks()
     adminServer.regHandler("/api/v1/namespace/create",
                 std::bind(&MetaServer::handleNameSpaceCreate, this, std::placeholders::_1));
     adminServer.regHandler("/api/v1/namespace/list",
-                std::bind(&MetaServer::handleNameSpaceList, this, std::placeholders::_1));
+                std::bind(&MetaServer::handleListNameSpace, this, std::placeholders::_1));
     adminServer.regHandler("/api/v1/locate",
                 std::bind(&MetaServer::handleLocate, this, std::placeholders::_1));
     adminServer.regHandler("/api/v1/stat",
@@ -215,10 +214,14 @@ void MetaServer::registerHttpCallbacks()
     adminServer.regHandler("/api/v1/del",
                 std::bind(&MetaServer::handleDel, this, std::placeholders::_1));
 
-    adminServer.regHandler("/api/v1/storage/addsrv",
+    adminServer.regHandler("/api/v1/storage/add",
                 std::bind(&MetaServer::handleAddStorageServer, this, std::placeholders::_1));
-    adminServer.regHandler("/api/v1/table/build",
-                std::bind(&MetaServer::handleBuildTable, this, std::placeholders::_1));
+    adminServer.regHandler("/api/v1/storage/list",
+                std::bind(&MetaServer::handleListStorageServer, this, std::placeholders::_1));
+    adminServer.regHandler("/api/v1/storage/rmv",
+                std::bind(&MetaServer::handleRmvStorageServer, this, std::placeholders::_1));
+    adminServer.regHandler("/api/v1/storage/rebalance",
+                std::bind(&MetaServer::handleRebalance, this, std::placeholders::_1));
 }
 
 void MetaServer::httpError(struct evhttp_request *req, int32_t code, const std::string& msg)
@@ -476,18 +479,6 @@ void MetaServer::handleRmvMetaServer(struct evhttp_request* req)
     } catch (std::exception& e) {
         httpError(req, 400, "exception: " + std::string(e.what()));
     }
-
-    // auto server = srvConfThread.getRaftServer();
-    // if (!server) {
-    //     httpError(req, 500, "add server failed!");
-    //     return ;
-    // }
-    // auto ret = server->remove_srv(srvid);
-
-    // std::string message = "rmv srv id: " + std::to_string(srvid) +" code: " + 
-    //                         std::to_string(ret->get_result_code()) + " desc: " + 
-    //                         ret->get_result_str();
-    // mybase::AdminServer::httpOk(req, 200, message);
 }
 
 void MetaServer::handleGetCluster(struct evhttp_request* req)
@@ -531,86 +522,67 @@ void MetaServer::handleNameSpaceCreate(struct evhttp_request* req)
         return ;
     }
 
-    // auto server = srvConfThread.getRaftServer();
-    // if (!server) {
-    //     httpError(req, 500, "add server failed!");
-    //     return ;
-    // }
+    std::string content = mybase::AdminServer::readContent(req);
+    if (content.empty()) {
+        httpError(req, 400, "empty content in post request!");
+        return ;
+    }
 
-    // if (!server->is_leader()) {
-    //     httpError(req, 500, "must be leader!");
-    //     return ;
-    // }
+    nlohmann::json json_obj;
+    if (!jsonParse(content, json_obj)) {
+        httpError(req, 400, "invalid json format!");
+        return ;
+    }
 
-    // auto group_info = srvConfThread.getGroupInfo();
-    // if (!group_info) {
-    //     httpError(req, 500, "group info is nullptr");
-    //     return ;
-    // }
+    if (json_obj["ns"].is_null()) {
+        httpError(req, 400, "missing ns!");
+        return ;
+    }
+    if (json_obj["capacity"].is_null()) {
+        httpError(req, 400, "missing capacity!");
+        return ;
+    }
 
-    // const std::map<uint32_t, uint64_t>& nmap = group_info->getNamespaceCapacityInfo();
-    // uint32_t ns = 0;
-    // uint64_t capacity = 0;
-    // for (uint32_t i = 1; i < sMaxNamespaceCount; i++) {
-    //     auto iter = nmap.find(i);
-    //     if (iter == nmap.end()) {
-    //         ns = i;
-    //         break;
-    //     }
-    // }
+    uint32_t ns = 0;
+    uint64_t capacity = 0;
+    try {
+        ns = json_obj["ns"].get<int32_t>();
+        capacity = json_obj["capacity"].get<int64_t>();
+    } catch (std::exception& e) {
+        httpError(req, 400, "exception: " + std::string(e.what()));
+        return ;
+    }
 
-    // if (ns == 0) {
-    //     httpError(req, 400, "no available namespace");
-    //     return ;
-    // }
+    bool ret = sysMgr->createNameSpace(ns, capacity);
 
-    // ptr<nuraft::buffer> log = nuraft::buffer::alloc(2*sizeof(int32_t) + sizeof(uint64_t));
-    // log->put((int32_t)((0xFF << 24) | 2));
-    // log->put((int32_t)ns);
-    // log->put((uint64_t)capacity);
-    // log->pos(0);
-    // auto ret = server->append_entries({log});
-
-    // nlohmann::json resp_obj;
-    // resp_obj["code"] = ret->get_result_code();
-    // resp_obj["namespace"] = ns;
-    // resp_obj["message"] = ret->get_result_str();
-    // mybase::AdminServer::httpOk(req, 200, resp_obj.dump());
+    nlohmann::json resp_obj;
+    resp_obj["code"] = ret ? 0 : OP_RETURN_FAILED;
+    resp_obj["namespace"] = ns;
+    std::string msg = "create namespace success!";
+    if( !ret ) {
+        msg = "create namespace failed!";
+    }
+    resp_obj["message"] = msg;
+    mybase::AdminServer::httpOk(req, 200, resp_obj.dump());
 }
 
-void MetaServer::handleNameSpaceList(struct evhttp_request* req)
+void MetaServer::handleListNameSpace(struct evhttp_request* req)
 {
     std::string mime_type("application/json; charset=utf-8");
     evhttp_add_header(evhttp_request_get_output_headers(req), "Content-Type", "0");
     evhttp_add_header(evhttp_request_get_output_headers(req), mime_type.c_str(), "1");
 
-    // auto server = srvConfThread.getRaftServer();
-    // if (!server) {
-    //     httpError(req, 500, "add server failed!");
-    //     return ;
-    // }
-
-    // if (!server->is_leader()) {
-    //     httpError(req, 500, "must be leader!");
-    //     return ;
-    // }
-
-    // auto group_info = srvConfThread.getGroupInfo();
-    // if (!group_info) {
-    //     httpError(req, 500, "group info is nullptr");
-    //     return ;
-    // }
-
-    // nlohmann::json resp_obj;
+    nlohmann::json resp_obj;
     // nlohmann::json arr_obj = nlohmann::json::array();
-    // const std::map<uint32_t, uint64_t>& nmap = group_info->getNamespaceCapacityInfo();
-    // for (auto& ele : nmap) {
-    //     arr_obj.push_back(ele.first);
-    // }
+    nlohmann::json arr_obj;
+    const std::map<uint32_t, uint64_t>& nmap = sysMgr->getNamespaceCapacityInfo();
+    for (auto& ele : nmap) {
+        arr_obj.emplace(std::to_string(ele.first), ele.second);
+    }
 
-    // resp_obj["code"] = 0;
-    // resp_obj["namespaces"] = arr_obj;
-    // mybase::AdminServer::httpOk(req, 200, resp_obj.dump());
+    resp_obj["code"] = 0;
+    resp_obj["namespaces"] = arr_obj;
+    mybase::AdminServer::httpOk(req, 200, resp_obj.dump());
 }
 
 void MetaServer::handleLocate(struct evhttp_request* req)
@@ -995,15 +967,89 @@ void MetaServer::handleAddStorageServer(struct evhttp_request* req)
         httpError(req, 400, "exception: " + std::string(e.what()));
     }
 
-    sysMgr->addStorageServer(srvid);
+    bool ret = sysMgr->addStorageServer(srvid);
 
     nlohmann::json resp_obj;
     resp_obj["code"] = 0;
-    resp_obj["desc"] = "success";
+    resp_obj["desc"] = ret ? "success" : "failed";
     httpOk(req, resp_obj.dump());
 }
 
-void MetaServer::handleBuildTable(struct evhttp_request* req)
+void MetaServer::handleListStorageServer(struct evhttp_request* req)
+{
+    std::string mime_type("application/json; charset=utf-8");
+    evhttp_add_header(evhttp_request_get_output_headers(req), "Content-Type", "0");
+    evhttp_add_header(evhttp_request_get_output_headers(req), mime_type.c_str(), "1");
+
+    uint64_t srvid = 0;
+    mybase::AdminServer::HttpMap params = mybase::AdminServer::parseParams(req);
+    if (params.find("addr") != params.end()) {
+        srvid = NetHelper::str2Addr( params["addr"] );
+    }
+
+    nlohmann::json resp_obj;
+    nlohmann::json arr_obj = nlohmann::json::array();
+
+    auto servers = sysMgr->getStorageServer(srvid);
+    for (auto& ele : servers) {
+        nlohmann::json obj;
+        obj["addr"] = NetHelper::addr2String(ele.serverid());
+        obj["lasttime"] = ele.lasttime();
+        obj["status"] = ele.status();
+
+        arr_obj.push_back( obj );
+    }
+
+    resp_obj["code"] = 0;
+    resp_obj["servers"] = arr_obj;
+    httpOk(req, resp_obj.dump());
+}
+
+void MetaServer::handleRmvStorageServer(struct evhttp_request* req)
+{
+    std::string mime_type("application/json; charset=utf-8");
+    evhttp_add_header(evhttp_request_get_output_headers(req), "Content-Type", "0");
+    evhttp_add_header(evhttp_request_get_output_headers(req), mime_type.c_str(), "1");
+
+    if (req->type != evhttp_cmd_type::EVHTTP_REQ_POST) {
+        httpError(req, 400, "not a post request!");
+        return ;
+    }
+
+    std::string content = mybase::AdminServer::readContent(req);
+    if (content.empty()) {
+        httpError(req, 400, "empty content in post request!");
+        return ;
+    }
+
+    nlohmann::json json_obj;
+    if (!jsonParse(content, json_obj)) {
+        httpError(req, 400, "invalid json format!");
+        return ;
+    }
+
+    uint64_t srvid;
+
+    if (json_obj["addr"].is_null()) {
+        httpError(req, 400, "missing addr!");
+        return ;
+    }
+
+    try {
+        srvid = NetHelper::str2Addr(json_obj["addr"].get<std::string>());
+    } catch (std::exception& e) {
+        httpError(req, 400, "exception: " + std::string(e.what()));
+    }
+
+    bool ret = sysMgr->rmvStorageServer(srvid);
+
+    nlohmann::json resp_obj;
+    resp_obj["code"] = 0;
+    resp_obj["desc"] = ret ? "success" : "failed";
+    httpOk(req, resp_obj.dump());
+}
+
+void MetaServer::handleRebalance(struct evhttp_request* req)
 {
     std::string mime_type("application/json; charset=utf-8");
     evhttp_add_header(evhttp_request_get_output_headers(req), "Content-Type", "0");
