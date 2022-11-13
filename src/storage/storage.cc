@@ -18,6 +18,8 @@ limitations under the License.
 #include "storage.h"
 #include "storage.pb.h"
 
+#include "kvstore/raftcc/kv_state_mgr.h"
+#include "kvstore/raftcc/kv_state_machine.h"
 #include "kvstore/rocksdb_manager.h"
 #include "public/common.h"
 
@@ -97,7 +99,6 @@ void StorageServer::process(const CloudConnHead& rsp_head, char* buf, uint32_t l
             log->pourData( entry_size );
             _log_warn(myLog, "KV_REQ_MESSAGE_PUT bucket: %u size: %d", bucket_no, log->dataLen());
 
-            bucketMgr[bucket_no].appendEntris( log );
             break;
         }
         case KV_REQ_MESSAGE_GET:
@@ -116,50 +117,7 @@ void StorageServer::process(const CloudConnHead& rsp_head, char* buf, uint32_t l
         }
         case KV_REQ_MESSAGE_DUMP:
         {
-            rsp_type = KV_RES_MESSAGE_DUMP_RETURN;
-            rsp_msg = std::make_shared<KvResponseDumpReturn>();
-            KvResponseDumpReturn* resp = _RC(KvResponseDumpReturn*, rsp_msg.get());
-
-            resp->set_accept( false );
-            std::shared_ptr<KvRequestDump> msg = std::make_shared<KvRequestDump>();
-            if (!msg->ParseFromArray(tmpbuf.curData(), tmpbuf.curDataLen())) {
-                break ;
-            }
-
-            _log_warn(myLog, "KV_REQ_MESSAGE_DUMP bucket: %u nextidx: %d entries: %d idx1: %lu idx2: %lu",
-                      msg->bucket(), msg->nextidx(), msg->entries().size(),
-                      bucketMgr[msg->bucket()].nextIndex(), msg->nextidx());
-
-            resp->set_peerid( msg->peerid() );
-            if (bucketMgr[msg->bucket()].nextIndex() != msg->nextidx()) {
-                resp->set_nextidx( bucketMgr[msg->bucket()].nextIndex() );
-                break;
-            }
-
-            uint32_t idx = 0;
-            for (auto& entry : msg->entries()) {
-                std::shared_ptr<Buffer> data = std::make_shared<Buffer>((uint8_t*)entry.data(), entry.size()); 
-                data->pos( 0 );
-                data->fillInt32((uint8_t*)data->curData(), rsp_head.sock_index);
-                data->pos( sizeof(uint32_t) );
-                data->fillInt32((uint8_t*)data->curData(), rsp_head.sock_create.tv_sec);
-                data->pos( 2*sizeof(uint32_t) );
-                data->fillInt32((uint8_t*)data->curData(), rsp_head.request.tv_sec);
-                data->pos( 3*sizeof(uint32_t) );
-                data->fillInt32((uint8_t*)data->curData(), rsp_head.src_ip);
-                data->pos( 4*sizeof(uint32_t) );
-                data->fillInt16((uint8_t*)data->curData(), rsp_head.src_port);
-
-                data->pos( 0 );
-                bucketMgr[msg->bucket()].writeAt(msg->nextidx() + (idx++), data);
-            }
-
-            resp->set_accept( true );
-            resp->set_nextidx( msg->nextidx() + msg->entries().size() );
-
-            bucketMgr[msg->bucket()].commit( msg->commitidx() );
-
-            resp->set_commitidx( msg->commitidx() );
+            
             break;
         }
         case KV_REQ_BUCKET_HEARTBEAT:
@@ -173,9 +131,6 @@ void StorageServer::process(const CloudConnHead& rsp_head, char* buf, uint32_t l
             KvResponseReturn* resp = _RC(KvResponseReturn*, rsp_msg.get());
 
             _log_warn(myLog, "KV_REQ_BUCKET_HEARTBEAT bucketid: %u idx: %lu", msg->bucketid(), msg->commitidx());
-            if (bucketMgr) {
-                bucketMgr[msg->bucketid()].commit(msg->commitidx());
-            }
             break;
         }
         default:
@@ -225,15 +180,6 @@ bool StorageServer::initServer()
         return false;
     }
 
-    peerpc = std::make_shared<RpcMgr>();
-    peerpc->setLogger(myLog);
-    if (!peerpc->initialize("peer")) {
-        _log_err(myLog, "rpc initialize failed!");
-        return false;
-    }
-
-    _log_info(myLog, "rpc initialize success!");
-
     commiter = new rpc::CThread("commiter", (rpc::CThread::callback)nullptr, myLog);
 
     kvengine.reset( new RocksdbManager() );
@@ -242,6 +188,16 @@ bool StorageServer::initServer()
     if (!kvengine->initialize()) {
         return false;
     }
+
+
+    int32_t raft_port = sDefaultConfig.getInt(sRaftSection, sRaftPort, 6198);
+    raft_mgr = std::make_shared<raftcc::RaftMgr>(nullptr, raft_port);
+    if ( !raft_mgr->initial() ) {
+        _log_err(myLog, "raft mgr initialize failed!");
+        return false;
+    }
+
+    _log_info(myLog, "raft mgr initialize success!");
 
 	registerHttpCallbacks();
 
@@ -274,6 +230,8 @@ void StorageServer::registerHttpCallbacks()
 
     adminServer.regHandler("/api/v1/raft/init",
                 std::bind(&StorageServer::handleInitRaft, this, std::placeholders::_1));
+    adminServer.regHandler("/api/v1/raft/status",
+                std::bind(&StorageServer::handleRaftStatus, this, std::placeholders::_1));
 }
 
 void StorageServer::handleOpenfalconReport(struct evhttp_request* req)
@@ -287,7 +245,95 @@ void StorageServer::handleOpenfalconReport(struct evhttp_request* req)
 
 void StorageServer::handleInitRaft(struct evhttp_request* req)
 {
-    
+    if (req->type != evhttp_cmd_type::EVHTTP_REQ_POST) {
+        httpError(req, 400, "not a post request!");
+        return ;
+    }
+
+    std::string content = mybase::AdminServer::readContent(req);
+    if (content.empty()) {
+        httpError(req, 400, "empty content in post request!");
+        return ;
+    }
+
+    nlohmann::json json_obj;
+    if (!jsonParse(content, json_obj)) {
+        httpError(req, 400, "invalid json format!");
+        return ;
+    }
+
+    if (json_obj["id"].is_null()) {
+        httpError(req, 400, "missing id!");
+        return ;
+    }
+
+    if (json_obj["partid"].is_null()) {
+        httpError(req, 400, "missing partid!");
+        return ;
+    }
+
+    uint64_t id = 0;
+    uint32_t partid = 0;
+    try {
+        id = json_obj["id"].get<uint64_t>();
+        partid = json_obj["partid"].get<uint64_t>();
+    } catch (std::exception& e) {
+        httpError(req, 400, "exception: " + std::string(e.what()));
+        return ;
+    }
+
+    raftcc::raft_params         rparams;     // your Raft parameters
+    rparams.election_timeout_lower_bound_ = 2000;
+    rparams.election_timeout_upper_bound_ = 3000;
+    rparams.snapshot_distance_ = 10000;
+    rparams.client_req_timeout_ = 1000;
+    rparams.use_bg_thread_for_urgent_commit_ = false;
+    rparams.return_method_ = raftcc::raft_params::async_handler;
+
+    const char* raft_data_dir = sDefaultConfig.getString(sRaftSection, sRaftDataDir, "raft_data");
+    int32_t raft_port = sDefaultConfig.getInt(sRaftSection, sRaftPort, 6198);
+    std::string raft_addr = "0.0.0.0:" + std::to_string(raft_port);
+
+    auto my_state_manager = std::make_shared<raftcc::kv_state_mgr>(raft_data_dir, partid, id, raft_addr.c_str(), nullptr );
+    auto my_state_machine = std::make_shared<raftcc::KvStateMachine>(raft_data_dir, partid, id, nullptr);
+
+    auto server = raft_mgr->create(my_state_machine, my_state_manager, rparams);
+
+    servers.emplace(partid, server);
+
+    nlohmann::json obj;
+    obj["desc"] = "success";
+
+    httpOk(req, obj.dump());
+}
+
+void StorageServer::handleRaftStatus(struct evhttp_request* req)
+{
+    AdminServer::HttpMap params = AdminServer::parseParams(req);
+
+    uint32_t partid = 0;
+    if (params.find("partid") != params.end()) {
+        partid = atoi(params["partid"].c_str());
+    }
+
+    if (partid == 0) {
+        httpError(req, 400, "missing partid!");
+        return ;
+    }
+
+    if ( !raft_mgr->get(partid) ) {
+        httpError(req, 400, "partid not exist!");
+        return ;
+    }
+
+    nlohmann::json obj;
+    if (!raft_mgr->get(partid)->is_initialized()) {
+        obj["status"] = "uninitialized";
+    } else {
+        obj["status"] = "initialized";
+    }
+
+    httpOk(req, obj.dump());
 }
 
 void StorageServer::handleDbStats(struct evhttp_request* req)
@@ -524,8 +570,7 @@ bool StorageServer::startServer()
     int32_t admin_port = sDefaultConfig.getInt(sStorageSection, sAdminPort, sDefaultAdminPort);
     _log_warn(myLog, "admin server start success! admin_port[%d]", admin_port);
 
-    heartbeatMgr = std::thread(&StorageServer::heartbeatRun, this);
-    migrateMgr = std::thread(&StorageServer::migrateRun, this);
+    // heartbeatMgr = std::thread(&StorageServer::heartbeatRun, this);
     monitorMgr = std::thread(&StorageServer::formatStatRun, this);
 
     return true;

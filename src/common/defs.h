@@ -100,7 +100,7 @@ __attribute__((unused)) static const char* sMetaService                = "metase
 __attribute__((unused)) static const char* sRouteService               = "routeservice";
 __attribute__((unused)) static const char* sHelperService              = "helperservice";
 __attribute__((unused)) static const char* sAgentService               = "agentservice";
-__attribute__((unused)) static const char* sMetaSection          = "meta";
+__attribute__((unused)) static const char* sMetaSection                = "meta";
 __attribute__((unused)) static const char* sStorageSection             = "storage";
 
 __attribute__((unused)) static const char* sMdbType                    = "mdb_type";

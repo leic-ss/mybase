@@ -100,18 +100,6 @@ void StorageServer::hbCallback(rpc::ContextX::ptr ctx_)
     copyCount = msg->copycount();
 
     do {
-        if (bucketMgr) break;
-
-        bucketMgr = new BucketMgr[bucketCount];
-
-        for (uint32_t i = 0; i < bucketCount; i++) {
-            bucketMgr[i].setRpcMgr(peerpc);
-            bucketMgr[i].setCommiter(commiter);
-            bucketMgr[i].setLogger(myLog);
-        }
-    } while (false);
-
-    do {
         if (msg->serverversion() <= metaVersion) break;
 
         _log_warn(myLog, "meta version changed! %d -> %d", metaVersion, msg->serverversion());
@@ -123,27 +111,6 @@ void StorageServer::hbCallback(rpc::ContextX::ptr ctx_)
 
         std::unordered_set<uint32_t> holdMasterBuckets;
         std::unordered_set<uint32_t> holdAllBuckets;
-        for (uint32_t i = 0; i < bucketCount; i++) {
-
-            if (NetHelper::sLocalServerAddr == table[i]) {
-                holdMasterBuckets.insert(i);
-                bucketMgr[i].initial(i);
-                bucketMgr[i].registCommitCB(std::bind(&StorageServer::commit, this, std::placeholders::_1));
-            }
-
-            for (uint32_t j = 1; j < copyCount; j++) {
-                if (NetHelper::sLocalServerAddr == table[i]) {
-                    uint64_t srv_id = table[i + j*bucketCount];
-                    bucketMgr[i].addPeer(srv_id);
-                }
-
-                if (NetHelper::sLocalServerAddr != table[i + j*bucketCount]) continue;
-
-                bucketMgr[i].initial(i);
-                bucketMgr[i].registCommitCB(std::bind(&StorageServer::commit, this, std::placeholders::_1));
-                holdAllBuckets.insert(i);
-            }
-        }
 
         _log_info(myLog, "hold master buckets count[%d] all buckets count[%d]",
                   holdMasterBuckets.size(), holdAllBuckets.size());

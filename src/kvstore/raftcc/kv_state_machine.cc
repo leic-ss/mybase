@@ -25,7 +25,7 @@ limitations under the License.
  
 #include <sys/mman.h>
 
-namespace mybase {
+namespace raftcc {
 
 KvStateMachine::KvStateMachine(const std::string& log_dir, uint32_t part_id, int32_t srv_id,
                  std::shared_ptr<raftcc::logger> logger_)

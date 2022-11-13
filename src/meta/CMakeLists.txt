@@ -10,8 +10,7 @@ set(METASERVER_SRC ${METASERVER_SRC_PATH}/meta.cc
                    ${METASERVER_SRC_PATH}/table_mgr.cc
                    ${METASERVER_SRC_PATH}/stat_info.cc
                    ${METASERVER_SRC_PATH}/table_builder.cc
-                   ${METASERVER_SRC_PATH}/sys_mgr.cc
-                   ${METASERVER_SRC_PATH}/kv_state_machine.cc)
+                   ${METASERVER_SRC_PATH}/sys_mgr.cc)
 
 add_executable(meta ${METASERVER_SRC}
                           $<TARGET_OBJECTS:COMMON_OBJ>

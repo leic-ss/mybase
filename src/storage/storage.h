@@ -27,8 +27,10 @@ limitations under the License.
 #include "public/cast_helper.h"
 #include "common/rpc_mgr.h"
 #include "kvstore/kv_engine.h"
-#include "bucket_mgr.h"
 #include "public/awaiter.h"
+
+#include "raftcc/raftcc.hxx"
+#include "raftcc/raft_mgr.h"
 
 #include "storage.pb.h"
 
@@ -94,6 +96,7 @@ protected:
     void handleOpenfalconReport(struct evhttp_request* req);
 
     void handleInitRaft(struct evhttp_request* req);
+    void handleRaftStatus(struct evhttp_request* req);
 
 protected:
 	void formatStatRun();
@@ -109,7 +112,6 @@ private:
     std::string lastFormatStat;
 
     RpcMgr::ptr clirpc{nullptr};
-    RpcMgr::ptr peerpc{nullptr};
 
     std::string configFile;
 
@@ -117,6 +119,10 @@ private:
     std::thread monitorMgr;
     std::thread heartbeatMgr;
     std::thread migrateMgr;
+
+    std::shared_ptr<raftcc::RaftMgr> raft_mgr{nullptr};
+
+    std::unordered_map<uint32_t, std::shared_ptr<raftcc::raft_server>> servers;
 
     AWaiter migwaiter;
 
@@ -129,8 +135,6 @@ private:
 
     uint32_t bucketCount{0};
     uint32_t copyCount{0};
-
-    BucketMgr* bucketMgr{nullptr};
 
     // table builder
     RWSimpleLock locker;

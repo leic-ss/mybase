@@ -28,7 +28,7 @@ limitations under the License.
  
 #include <sys/mman.h>
 
-namespace mybase {
+namespace raftcc {
 
 class KvStateMachine : public raftcc::state_machine {
 public:

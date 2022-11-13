@@ -17,11 +17,11 @@ limitations under the License.
 
 #pragma once
 
-#include "bitmap.h"
-#include "validbucket.h"
-#include "dlog.h"
-#include "common.h"
-#include "defs.h"
+#include "public/bitmap.h"
+#include "common/validbucket.h"
+#include "public/dlog.h"
+#include "public/common.h"
+#include "common/defs.h"
 
 #include <unordered_map>
 #include <mutex>
